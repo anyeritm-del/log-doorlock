@@ -31,7 +31,7 @@ since it requires your Google Cloud / Workspace console access — follow the st
 4. Copy the client ID and secret → `GOOGLE_OAUTH_CLIENT_ID` / `GOOGLE_OAUTH_CLIENT_SECRET`.
 5. If prompted, configure the OAuth consent screen as **Internal** (restricts sign-in to your
    Google Workspace domain) if this is a Workspace account, otherwise **External** and rely on the
-   app's own `ALLOWED_EMAIL_DOMAIN` check.
+   app's own `ALLOWED_EMAIL_DOMAINS` check.
 
 ## 4. The registry spreadsheet
 
@@ -49,7 +49,19 @@ hotel's actual log data) is created automatically by the app.
 6. Copy the spreadsheet ID from its URL (`https://docs.google.com/spreadsheets/d/<THIS PART>/edit`)
    → `ADMIN_SHEET_ID`.
 
-## 5. Environment variables
+## 5. (Optional) Shared Drive folder for hotel sheets
+
+By default, each hotel spreadsheet the app creates lands in the service account's own private
+Drive space — reachable via its direct link (which gets auto-shared with the admin who created it)
+but not browsable in Drive by anyone else. To make every hotel's sheet show up in a shared Drive
+folder your whole admin team can browse:
+
+1. Create (or reuse) a Google Drive folder.
+2. Share it with the service account's `client_email` as **Editor**.
+3. Copy the folder ID from its URL (`https://drive.google.com/drive/folders/<THIS PART>`) →
+   `DRIVE_FOLDER_ID`. Leave this unset to skip the shared-folder behavior entirely.
+
+## 6. Environment variables
 
 Set these locally in `.env.local` and in the Vercel project's Environment Variables settings:
 
@@ -58,12 +70,13 @@ GOOGLE_SERVICE_ACCOUNT_EMAIL=...
 GOOGLE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n"
 GOOGLE_OAUTH_CLIENT_ID=...
 GOOGLE_OAUTH_CLIENT_SECRET=...
-AUTH_SECRET=... # generate with `npx auth secret`
+AUTH_SECRET=... # generate with `node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"`
 ADMIN_SHEET_ID=...
-ALLOWED_EMAIL_DOMAIN=archipelagohotels.com
+DRIVE_FOLDER_ID=... # optional, see step 5
+ALLOWED_EMAIL_DOMAINS=archipelagohotels.com,astonhotelsinternational.com
 ```
 
-## 6. Deploying to Vercel
+## 7. Deploying to Vercel
 
 1. Push this repo to GitHub/GitLab/Bitbucket and import it in Vercel, or run `vercel` from this
    directory.

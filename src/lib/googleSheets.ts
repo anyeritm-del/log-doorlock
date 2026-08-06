@@ -2,7 +2,11 @@ import { google, sheets_v4 } from "googleapis";
 
 const SCOPES = [
   "https://www.googleapis.com/auth/spreadsheets",
-  "https://www.googleapis.com/auth/drive.file",
+  // "drive.file" only grants access to files the service account itself created —
+  // it can't see folders a human shares with it via the sharing UI. Since hotel
+  // sheets get moved into a human-managed shared folder (DRIVE_FOLDER_ID), the
+  // broader "drive" scope is needed.
+  "https://www.googleapis.com/auth/drive",
 ];
 
 function getServiceAccountAuth() {
@@ -131,6 +135,19 @@ export async function createHotelSpreadsheet(hotelName: string): Promise<string>
       values: [["Date", "Time", "Card", "Encoded by", "Date", "Time"]],
     },
   });
+
+  const folderId = process.env.DRIVE_FOLDER_ID;
+  if (folderId) {
+    const drive = getDriveClient();
+    // Sheets creates the file in the service account's own Drive root by default;
+    // move it into the shared folder rather than just adding a second parent there.
+    await drive.files.update({
+      fileId: spreadsheetId,
+      addParents: folderId,
+      removeParents: "root",
+      fields: "id, parents",
+    });
+  }
 
   return spreadsheetId;
 }

@@ -17,8 +17,11 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       const email = user.email?.toLowerCase();
       if (!email) return false;
 
-      const allowedDomain = process.env.ALLOWED_EMAIL_DOMAIN;
-      if (allowedDomain && !email.endsWith(`@${allowedDomain.toLowerCase()}`)) {
+      const allowedDomains = (process.env.ALLOWED_EMAIL_DOMAINS ?? "")
+        .split(",")
+        .map((d) => d.trim().toLowerCase())
+        .filter(Boolean);
+      if (allowedDomains.length > 0 && !allowedDomains.some((d) => email.endsWith(`@${d}`))) {
         return false;
       }
 
