@@ -22,10 +22,10 @@ export default async function UploadPage({
       </p>
       <h1 className="text-lg font-semibold">Upload a door lock log</h1>
       <p className="text-sm text-gray-600">
-        Upload an Excel (.xlsx) or CSV export matching the standard 6-column layout (Date, Time,
-        Card, Encoded by, Encoded Date, Encoded Time). Rows already present in the target floor
-        won&apos;t be duplicated, and rows for room numbers not yet registered on that floor will
-        be skipped — register them on the floor page first, then re-upload.
+        Upload an Excel (.xlsx) or CSV export matching the standard 9-column layout (Date, Time,
+        Card, Encoded by, Date, Time, Issuer, Time Issued, Room). Rows already present in the
+        target floor won&apos;t be duplicated, and rows for room numbers not yet registered on
+        that floor will be skipped — register them on the floor page first, then re-upload.
       </p>
       <UploadForm hotelId={hotelId} floors={floors} />
     </div>

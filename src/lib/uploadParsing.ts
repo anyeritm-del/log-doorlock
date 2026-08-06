@@ -2,7 +2,7 @@ import ExcelJS from "exceljs";
 import { Readable } from "node:stream";
 import type { RawLogRow } from "./parseCard";
 
-const HEADER_MARKERS = ["date", "time", "card", "encoded by", "encoded"];
+const HEADER_MARKERS = ["date", "time", "card", "encoded by", "encoded", "issuer", "room"];
 
 function cellToString(value: ExcelJS.CellValue): string {
   if (value === null || value === undefined) return "";
@@ -32,7 +32,7 @@ function worksheetToRawRows(worksheet: ExcelJS.Worksheet): RawLogRow[] {
   const rows: RawLogRow[] = [];
   worksheet.eachRow((row) => {
     const cells: string[] = [];
-    for (let col = 1; col <= 6; col++) {
+    for (let col = 1; col <= 9; col++) {
       cells.push(cellToString(row.getCell(col).value));
     }
     if (looksLikeHeaderRow(cells)) return;
@@ -41,16 +41,19 @@ function worksheetToRawRows(worksheet: ExcelJS.Worksheet): RawLogRow[] {
     rows.push({
       date: cells[0] ?? "",
       time: cells[1] ?? "",
-      card: cells[2] ?? "",
-      encodedBy: cells[3] ?? "",
-      encodedDate: cells[4] ?? "",
-      encodedTime: cells[5] ?? "",
+      cardType: cells[2] ?? "",
+      cardNumber: cells[3] ?? "",
+      keyName: cells[4] ?? "",
+      keyLocation: cells[5] ?? "",
+      issuer: cells[6] ?? "",
+      timeIssued: cells[7] ?? "",
+      room: cells[8] ?? "",
     });
   });
   return rows;
 }
 
-/** Parses an uploaded .xlsx or .csv file's first worksheet into raw log rows (A-F columns). */
+/** Parses an uploaded .xlsx or .csv file's first worksheet into raw log rows (A-I columns). */
 export async function parseUploadedLogFile(
   buffer: Buffer,
   filename: string
@@ -75,7 +78,17 @@ export async function parseUploadedLogFile(
 
 /** Stable dedupe key for a row, used to avoid re-appending rows already present in a floor tab. */
 export function rowDedupeKey(row: RawLogRow): string {
-  return [row.date, row.time, row.card, row.encodedBy, row.encodedDate, row.encodedTime]
+  return [
+    row.date,
+    row.time,
+    row.cardType,
+    row.cardNumber,
+    row.keyName,
+    row.keyLocation,
+    row.issuer,
+    row.timeIssued,
+    row.room,
+  ]
     .map((s) => s.trim().toLowerCase())
     .join("|");
 }

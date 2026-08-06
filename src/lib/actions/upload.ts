@@ -4,7 +4,7 @@ import { requireSession, canAccessHotel } from "@/lib/authz";
 import { getHotel } from "@/lib/registry";
 import { readSheetRows, appendSheetRows, listTabNames } from "@/lib/googleSheets";
 import { parseUploadedLogFile, rowDedupeKey } from "@/lib/uploadParsing";
-import { classifyRow, type RawLogRow } from "@/lib/parseCard";
+import { classifyRow, rawLogRowFromCells } from "@/lib/parseCard";
 import { listRoomRoster, ROOMS_TAB } from "@/lib/rooms";
 
 export interface UploadState {
@@ -71,8 +71,8 @@ export async function uploadLogAction(
   const skippedUnknown = parsedRows.length - acceptedRows.length;
 
   const existingTabs = await listTabNames(hotel.sheetId);
-  const existingRows: RawLogRow[] = existingTabs.includes(floorName)
-    ? (await readSheetRows(hotel.sheetId, floorName)).slice(1).map(rawFromCells)
+  const existingRows = existingTabs.includes(floorName)
+    ? (await readSheetRows(hotel.sheetId, floorName)).slice(1).map(rawLogRowFromCells)
     : [];
   const existingKeys = new Set(existingRows.map(rowDedupeKey));
 
@@ -81,7 +81,17 @@ export async function uploadLogAction(
     await appendSheetRows(
       hotel.sheetId,
       floorName,
-      newRows.map((r) => [r.date, r.time, r.card, r.encodedBy, r.encodedDate, r.encodedTime])
+      newRows.map((r) => [
+        r.date,
+        r.time,
+        r.cardType,
+        r.cardNumber,
+        r.keyName,
+        r.keyLocation,
+        r.issuer,
+        r.timeIssued,
+        r.room,
+      ])
     );
   }
 
@@ -92,16 +102,5 @@ export async function uploadLogAction(
     skipped: acceptedRows.length - newRows.length,
     skippedUnknown,
     unknownRooms: Array.from(unknownRooms).sort(),
-  };
-}
-
-function rawFromCells(cells: string[]): RawLogRow {
-  return {
-    date: cells[0] ?? "",
-    time: cells[1] ?? "",
-    card: cells[2] ?? "",
-    encodedBy: cells[3] ?? "",
-    encodedDate: cells[4] ?? "",
-    encodedTime: cells[5] ?? "",
   };
 }

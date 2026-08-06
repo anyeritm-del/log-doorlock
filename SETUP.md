@@ -95,13 +95,14 @@ ALLOWED_EMAIL_DOMAINS=archipelagohotels.com,astonhotelsinternational.com
 
 ## Notes / known limits
 
-- **Format assumption**: the upload parser assumes every hotel exports logs in the same 6-column
-  layout as the sample screenshot (Date, Time, Card, Encoded by, Encoded Date, Encoded Time). If a
-  brand's door-lock software exports differently, its files won't parse correctly — flag this
-  before onboarding a hotel with an unfamiliar export format.
-- **Master key detection** is a heuristic: any Card value that doesn't start with a room number
-  (e.g. `FMK (HKS-4)`) is treated as a master/staff key. An unusual room-naming scheme could be
-  misclassified — check a hotel's first upload before trusting it.
+- **Format assumption**: the upload parser assumes every hotel exports logs in the same 9-column
+  layout confirmed against real data (Date, Time, Card [type], Encoded by [card serial], Date [key
+  name], Time [key location], Issuer, Time Issued, Room). If a brand's door-lock software exports
+  differently, its files won't parse correctly — flag this before onboarding a hotel with an
+  unfamiliar export format.
+- **Room assignment** comes directly from the explicit Room column (I) — including Floor
+  Card/Master Card rows, which still belong to whichever room's door they opened. A row is only
+  treated as a floor-wide Master Key (not tied to any room) when its Room column is blank.
 - **Google Sheets row ceiling**: each hotel's spreadsheet can hold roughly 1.6M log rows in total
   across all floor tabs (Sheets' 10M-cell limit ÷ 6 columns). High-traffic properties may need
   periodic archiving of old floor tabs — not built yet, but worth planning for if a property

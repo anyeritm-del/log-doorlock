@@ -1,47 +1,62 @@
 export interface RawLogRow {
-  date: string;
-  time: string;
-  card: string;
-  encodedBy: string;
-  encodedDate: string;
-  encodedTime: string;
+  date: string; // A — access date/time
+  time: string; // B — unused/blank in the real export; kept for column-position fidelity & dedupe
+  cardType: string; // C — "Guest Card" | "Floor Card" | "Master Card" | ...
+  cardNumber: string; // D — card serial (sheet header literally says "Encoded by")
+  keyName: string; // E — master key name (sheet header literally says "Date")
+  keyLocation: string; // F — master key coverage area (sheet header literally says "Time")
+  issuer: string; // G — who issued/encoded it
+  timeIssued: string; // H
+  room: string; // I — explicit room number, authoritative
+}
+
+/** Maps a raw sheet row (A-I cells, as returned by readSheetRows) into a RawLogRow. */
+export function rawLogRowFromCells(cells: string[]): RawLogRow {
+  return {
+    date: cells[0] ?? "",
+    time: cells[1] ?? "",
+    cardType: cells[2] ?? "",
+    cardNumber: cells[3] ?? "",
+    keyName: cells[4] ?? "",
+    keyLocation: cells[5] ?? "",
+    issuer: cells[6] ?? "",
+    timeIssued: cells[7] ?? "",
+    room: cells[8] ?? "",
+  };
 }
 
 export type LogEntry =
   | { kind: "newGuest" }
-  | { kind: "room"; room: string; variant: string; row: RawLogRow }
+  | { kind: "room"; room: string; row: RawLogRow }
   | { kind: "masterKey"; label: string; row: RawLogRow };
 
 const NEW_GUEST_PATTERN = /^new\s*guest$/i;
-// A card that starts with digits (optionally followed by a suffix like
-// "Copy Number 2") is a guest room. Anything else (FMK, HK, ...) is a
-// master/staff key.
-const LEADING_ROOM_NUMBER = /^(\d+)\s*(.*)$/;
 
-/** Classifies a single row of a floor tab. Rows with an empty Card are New Guest dividers
- * whose Date/Time columns render as "######" in the source spreadsheet (column-too-narrow),
- * not actual data. */
+/** Classifies a single row of a floor tab. Room assignment reads column I directly rather than
+ * guessing from the Card type — a Floor Card/Master Card row still belongs to whichever room's
+ * door it opened. Only rows with no room number at all fall into the Master Keys bucket. */
 export function classifyRow(row: RawLogRow): LogEntry | null {
-  const card = row.card.trim();
-  if (!card) return null;
+  const cardType = row.cardType.trim();
+  const room = row.room.trim();
 
-  if (NEW_GUEST_PATTERN.test(card)) {
+  if (!cardType && !room) return null;
+
+  if (NEW_GUEST_PATTERN.test(cardType)) {
     return { kind: "newGuest" };
   }
 
-  const match = card.match(LEADING_ROOM_NUMBER);
-  if (match) {
-    const room = match[1];
-    const rest = match[2].trim();
-    return { kind: "room", room, variant: rest.length > 0 ? rest : "Primary", row };
+  if (room) {
+    return { kind: "room", room, row };
   }
 
-  return { kind: "masterKey", label: card, row };
+  const label = row.keyName.trim() || cardType;
+  if (!label) return null;
+  return { kind: "masterKey", label, row };
 }
 
 export interface RoomGroup {
   room: string;
-  entries: Array<{ hasNewGuestBefore: boolean; row: RawLogRow; variant: string }>;
+  entries: Array<{ hasNewGuestBefore: boolean; row: RawLogRow }>;
 }
 
 export interface MasterKeyGroup {
@@ -77,11 +92,7 @@ export function buildFloorIndex(rows: RawLogRow[]): FloorIndex {
         group = { room: classified.room, entries: [] };
         roomMap.set(classified.room, group);
       }
-      group.entries.push({
-        hasNewGuestBefore: pendingNewGuest,
-        row: classified.row,
-        variant: classified.variant,
-      });
+      group.entries.push({ hasNewGuestBefore: pendingNewGuest, row: classified.row });
     } else {
       let group = masterKeyMap.get(classified.label);
       if (!group) {
@@ -101,10 +112,4 @@ export function buildFloorIndex(rows: RawLogRow[]): FloorIndex {
     rooms: Array.from(roomMap.values()).sort((a, b) => naturalRoomSort(a.room, b.room)),
     masterKeys: Array.from(masterKeyMap.values()).sort((a, b) => a.label.localeCompare(b.label)),
   };
-}
-
-/** Extracts the log for a single room, in sheet order, including its New Guest dividers. */
-export function getRoomLog(rows: RawLogRow[], room: string) {
-  const index = buildFloorIndex(rows);
-  return index.rooms.find((r) => r.room === room)?.entries ?? [];
 }

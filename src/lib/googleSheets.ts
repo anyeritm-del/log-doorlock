@@ -56,7 +56,17 @@ export async function readSheetRows(
   return (res.data.values as string[][] | undefined) ?? [];
 }
 
-export const LOG_HEADER_ROW = ["Date", "Time", "Card", "Encoded by", "Date", "Time"];
+export const LOG_HEADER_ROW = [
+  "Date",
+  "Time",
+  "Card",
+  "Encoded by",
+  "Date",
+  "Time",
+  "Issuer",
+  "Time Issued",
+  "Room",
+];
 
 /** Appends rows to the end of a sheet/tab. Creates the tab first if it doesn't exist. */
 export async function appendSheetRows(
