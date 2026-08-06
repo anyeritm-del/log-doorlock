@@ -113,20 +113,50 @@ async function ensureTabExists(
   });
 }
 
-/** Creates a brand-new Google Sheet (via Drive) for a hotel and returns its spreadsheet ID. */
+/** Creates a brand-new Google Sheet for a hotel and returns its spreadsheet ID. */
 export async function createHotelSpreadsheet(hotelName: string): Promise<string> {
-  const sheets = getSheetsClient();
-  const res = await sheets.spreadsheets.create({
-    requestBody: {
-      properties: { title: `Door Lock Logs - ${hotelName}` },
-      sheets: [{ properties: { title: "Floor 1" } }],
-    },
-  });
-  const spreadsheetId = res.data.spreadsheetId;
-  if (!spreadsheetId) {
-    throw new Error("Google Sheets did not return a spreadsheetId when creating the hotel sheet.");
+  const folderId = process.env.DRIVE_FOLDER_ID;
+  if (!folderId) {
+    // Service accounts have no Drive storage quota of their own, so
+    // sheets.spreadsheets.create() (which always lands in the service account's
+    // own Drive) fails with "The caller does not have permission". Creating the
+    // file directly inside a human-owned shared folder borrows that owner's
+    // quota, which is why DRIVE_FOLDER_ID is required, not just for browsability.
+    throw new Error(
+      "DRIVE_FOLDER_ID must be set to create hotel sheets — service accounts have no " +
+        "Drive storage quota of their own. See SETUP.md step 5."
+    );
   }
 
+  const drive = getDriveClient();
+  const file = await drive.files.create({
+    requestBody: {
+      name: `Door Lock Logs - ${hotelName}`,
+      mimeType: "application/vnd.google-apps.spreadsheet",
+      parents: [folderId],
+    },
+    // Required whenever the parent lives in a Shared Drive, which is what
+    // DRIVE_FOLDER_ID is expected to be — see SETUP.md step 5.
+    supportsAllDrives: true,
+    fields: "id",
+  });
+  const spreadsheetId = file.data.id;
+  if (!spreadsheetId) {
+    throw new Error("Google Drive did not return a file id when creating the hotel sheet.");
+  }
+
+  const sheets = getSheetsClient();
+  const created = await sheets.spreadsheets.get({ spreadsheetId });
+  const defaultSheetId = created.data.sheets?.[0]?.properties?.sheetId;
+
+  await sheets.spreadsheets.batchUpdate({
+    spreadsheetId,
+    requestBody: {
+      requests: [
+        { updateSheetProperties: { properties: { sheetId: defaultSheetId, title: "Floor 1" }, fields: "title" } },
+      ],
+    },
+  });
   await sheets.spreadsheets.values.update({
     spreadsheetId,
     range: `'Floor 1'!A1`,
@@ -135,19 +165,6 @@ export async function createHotelSpreadsheet(hotelName: string): Promise<string>
       values: [["Date", "Time", "Card", "Encoded by", "Date", "Time"]],
     },
   });
-
-  const folderId = process.env.DRIVE_FOLDER_ID;
-  if (folderId) {
-    const drive = getDriveClient();
-    // Sheets creates the file in the service account's own Drive root by default;
-    // move it into the shared folder rather than just adding a second parent there.
-    await drive.files.update({
-      fileId: spreadsheetId,
-      addParents: folderId,
-      removeParents: "root",
-      fields: "id, parents",
-    });
-  }
 
   return spreadsheetId;
 }
@@ -161,6 +178,7 @@ export async function shareSpreadsheetWithUser(
   await drive.permissions.create({
     fileId: spreadsheetId,
     sendNotificationEmail: false,
+    supportsAllDrives: true,
     requestBody: { type: "user", role: "writer", emailAddress: email },
   });
 }

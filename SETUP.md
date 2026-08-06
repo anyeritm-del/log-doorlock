@@ -49,17 +49,26 @@ hotel's actual log data) is created automatically by the app.
 6. Copy the spreadsheet ID from its URL (`https://docs.google.com/spreadsheets/d/<THIS PART>/edit`)
    → `ADMIN_SHEET_ID`.
 
-## 5. (Optional) Shared Drive folder for hotel sheets
+## 5. Shared Drive for hotel sheets (required)
 
-By default, each hotel spreadsheet the app creates lands in the service account's own private
-Drive space — reachable via its direct link (which gets auto-shared with the admin who created it)
-but not browsable in Drive by anyone else. To make every hotel's sheet show up in a shared Drive
-folder your whole admin team can browse:
+Service accounts have no Drive storage quota of their own. A regular "My Drive" folder shared as
+Editor with the service account does **not** fix this — files it creates still count against its
+own (zero) quota no matter whose folder they're nested under, and creation fails with
+`storageQuotaExceeded` regardless of how much space the folder owner actually has free.
 
-1. Create (or reuse) a Google Drive folder.
-2. Share it with the service account's `client_email` as **Editor**.
-3. Copy the folder ID from its URL (`https://drive.google.com/drive/folders/<THIS PART>`) →
-   `DRIVE_FOLDER_ID`. Leave this unset to skip the shared-folder behavior entirely.
+The fix is a **Shared Drive** (Team Drive, Workspace-only), which has its own storage pool not
+tied to any individual member. This also means every hotel's sheet shows up in one place your
+whole admin team can browse, instead of only being reachable via a direct link.
+
+1. In Google Drive: left sidebar → **Shared drives** → **+ New**. Name it, e.g. "Door Lock Logs".
+2. Open it → **Manage members** → add the service account's `client_email` as **Content Manager**
+   (Editor-equivalent for a Shared Drive).
+3. Copy the Shared Drive's ID from its URL (`https://drive.google.com/drive/folders/<THIS PART>`)
+   → `DRIVE_FOLDER_ID`. Hotel creation will fail without this set.
+
+If "Shared drives" doesn't appear in the sidebar, your Workspace admin has disabled them for this
+account/org unit — they'll need to enable it (Admin console → Apps → Google Workspace → Drive and
+Docs → Sharing settings → Shared drive creation).
 
 ## 6. Environment variables
 
