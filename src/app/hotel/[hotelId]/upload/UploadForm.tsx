@@ -62,10 +62,19 @@ export function UploadForm({ hotelId, floors }: { hotelId: string; floors: strin
       </button>
 
       {state.status === "success" && (
-        <p className="text-sm text-green-700">
-          {state.message} Added {state.added}, skipped {state.skipped} duplicate
-          {state.skipped === 1 ? "" : "s"}.
-        </p>
+        <div className="flex flex-col gap-1">
+          <p className="text-sm text-green-700">
+            {state.message} Added {state.added}, skipped {state.skipped} duplicate
+            {state.skipped === 1 ? "" : "s"}.
+          </p>
+          {(state.skippedUnknown ?? 0) > 0 && (
+            <p className="text-sm text-amber-700">
+              Skipped {state.skippedUnknown} row{state.skippedUnknown === 1 ? "" : "s"} for
+              unregistered room{state.unknownRooms && state.unknownRooms.length === 1 ? "" : "s"}:{" "}
+              {state.unknownRooms?.join(", ")}. Register them on the floor page and re-upload.
+            </p>
+          )}
+        </div>
       )}
       {state.status === "error" && <p className="text-sm text-red-700">{state.message}</p>}
     </form>

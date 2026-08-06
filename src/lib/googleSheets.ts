@@ -56,21 +56,24 @@ export async function readSheetRows(
   return (res.data.values as string[][] | undefined) ?? [];
 }
 
+export const LOG_HEADER_ROW = ["Date", "Time", "Card", "Encoded by", "Date", "Time"];
+
 /** Appends rows to the end of a sheet/tab. Creates the tab first if it doesn't exist. */
 export async function appendSheetRows(
   spreadsheetId: string,
   sheetName: string,
   rows: (string | number)[][]
 ): Promise<void> {
-  await ensureTabExists(spreadsheetId, sheetName, [
-    "Date",
-    "Time",
-    "Card",
-    "Encoded by",
-    "Date",
-    "Time",
-  ]);
+  await ensureTabExists(spreadsheetId, sheetName, LOG_HEADER_ROW);
+  await appendRawRows(spreadsheetId, sheetName, rows);
+}
 
+/** Appends rows to a tab that's expected to already exist (see ensureTabExists). */
+export async function appendRawRows(
+  spreadsheetId: string,
+  sheetName: string,
+  rows: (string | number)[][]
+): Promise<void> {
   const sheets = getSheetsClient();
   await sheets.spreadsheets.values.append({
     spreadsheetId,
@@ -90,7 +93,8 @@ export async function listTabNames(spreadsheetId: string): Promise<string[]> {
     .filter((t): t is string => Boolean(t));
 }
 
-async function ensureTabExists(
+/** Creates a tab with the given header row if it doesn't already exist; no-op otherwise. */
+export async function ensureTabExists(
   spreadsheetId: string,
   sheetName: string,
   headerRow: string[]
@@ -162,7 +166,7 @@ export async function createHotelSpreadsheet(hotelName: string): Promise<string>
     range: `'Floor 1'!A1`,
     valueInputOption: "USER_ENTERED",
     requestBody: {
-      values: [["Date", "Time", "Card", "Encoded by", "Date", "Time"]],
+      values: [LOG_HEADER_ROW],
     },
   });
 

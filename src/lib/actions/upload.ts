@@ -4,13 +4,16 @@ import { requireSession, canAccessHotel } from "@/lib/authz";
 import { getHotel } from "@/lib/registry";
 import { readSheetRows, appendSheetRows, listTabNames } from "@/lib/googleSheets";
 import { parseUploadedLogFile, rowDedupeKey } from "@/lib/uploadParsing";
-import type { RawLogRow } from "@/lib/parseCard";
+import { classifyRow, type RawLogRow } from "@/lib/parseCard";
+import { listRoomRoster, ROOMS_TAB } from "@/lib/rooms";
 
 export interface UploadState {
   status: "idle" | "success" | "error";
   message?: string;
   added?: number;
   skipped?: number;
+  skippedUnknown?: number;
+  unknownRooms?: string[];
 }
 
 export async function uploadLogAction(
@@ -34,6 +37,9 @@ export async function uploadLogAction(
   if (!floorName) {
     return { status: "error", message: "Choose or name a floor." };
   }
+  if (floorName === ROOMS_TAB) {
+    return { status: "error", message: `"${ROOMS_TAB}" is a reserved name — choose another.` };
+  }
 
   const file = formData.get("file");
   if (!(file instanceof File) || file.size === 0) {
@@ -49,13 +55,28 @@ export async function uploadLogAction(
     return { status: "error", message: "No data rows found in that file." };
   }
 
+  // Room rows are only accepted for numbers already registered on this floor — a floor
+  // with no roster (including a brand-new one) rejects all room rows, which is what
+  // enforces "register rooms before uploading." Master keys and New Guest markers are
+  // never validated against the roster.
+  const roster = new Set(await listRoomRoster(hotel.sheetId, floorName));
+  const unknownRooms = new Set<string>();
+  const acceptedRows = parsedRows.filter((row) => {
+    const classified = classifyRow(row);
+    if (classified?.kind !== "room") return true;
+    if (roster.has(classified.room)) return true;
+    unknownRooms.add(classified.room);
+    return false;
+  });
+  const skippedUnknown = parsedRows.length - acceptedRows.length;
+
   const existingTabs = await listTabNames(hotel.sheetId);
   const existingRows: RawLogRow[] = existingTabs.includes(floorName)
     ? (await readSheetRows(hotel.sheetId, floorName)).slice(1).map(rawFromCells)
     : [];
   const existingKeys = new Set(existingRows.map(rowDedupeKey));
 
-  const newRows = parsedRows.filter((r) => !existingKeys.has(rowDedupeKey(r)));
+  const newRows = acceptedRows.filter((r) => !existingKeys.has(rowDedupeKey(r)));
   if (newRows.length > 0) {
     await appendSheetRows(
       hotel.sheetId,
@@ -68,7 +89,9 @@ export async function uploadLogAction(
     status: "success",
     message: `Uploaded to ${floorName}.`,
     added: newRows.length,
-    skipped: parsedRows.length - newRows.length,
+    skipped: acceptedRows.length - newRows.length,
+    skippedUnknown,
+    unknownRooms: Array.from(unknownRooms).sort(),
   };
 }
 

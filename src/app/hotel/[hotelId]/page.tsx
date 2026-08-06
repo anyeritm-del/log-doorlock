@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { requireHotelAccess } from "@/lib/authz";
-import { listTabNames } from "@/lib/googleSheets";
+import { listFloorNames } from "@/lib/rooms";
+import { CreateFloorForm } from "./CreateFloorForm";
 
 export default async function HotelFloorsPage({
   params,
@@ -9,7 +10,7 @@ export default async function HotelFloorsPage({
 }) {
   const { hotelId } = await params;
   const hotel = await requireHotelAccess(hotelId);
-  const floors = await listTabNames(hotel.sheetId);
+  const floors = await listFloorNames(hotel.sheetId);
 
   return (
     <div className="flex flex-col gap-4">
@@ -27,9 +28,7 @@ export default async function HotelFloorsPage({
       </div>
 
       <h2 className="text-sm font-medium text-gray-600">Floors</h2>
-      {floors.length === 0 && (
-        <p className="text-sm text-gray-600">No floors yet. Upload a log file to create one.</p>
-      )}
+      {floors.length === 0 && <p className="text-sm text-gray-600">No floors yet.</p>}
       <ul className="grid gap-3 sm:grid-cols-3">
         {floors.map((floor) => (
           <li key={floor}>
@@ -42,6 +41,8 @@ export default async function HotelFloorsPage({
           </li>
         ))}
       </ul>
+
+      <CreateFloorForm hotelId={hotelId} />
     </div>
   );
 }
