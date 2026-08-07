@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { requireHotelAccess } from "@/lib/authz";
 import { readSheetRows } from "@/lib/googleSheets";
 import { listFloorNames, listRoomRoster } from "@/lib/rooms";
-import { buildFloorIndex, rawLogRowFromCells } from "@/lib/parseCard";
+import { buildFloorIndex, detectSheetFormat, rawLogRowFromCells } from "@/lib/parseCard";
 import { AddRoomsForm } from "./AddRoomsForm";
 
 export default async function FloorPage({
@@ -22,7 +22,8 @@ export default async function FloorPage({
     listRoomRoster(hotel.sheetId, floorName),
     readSheetRows(hotel.sheetId, floorName),
   ]);
-  const dataRows = rows.slice(1).map(rawLogRowFromCells);
+  const format = detectSheetFormat(rows[0] ?? []);
+  const dataRows = rows.slice(1).map((cells) => rawLogRowFromCells(cells, format));
   const index = buildFloorIndex(dataRows);
   const entryCountByRoom = new Map(index.rooms.map((r) => [r.room, r.entries.length]));
   const unregisteredLoggedRooms = index.rooms.filter((r) => !roster.includes(r.room));

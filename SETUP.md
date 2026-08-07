@@ -95,14 +95,22 @@ ALLOWED_EMAIL_DOMAINS=archipelagohotels.com,astonhotelsinternational.com
 
 ## Notes / known limits
 
-- **Format assumption**: the upload parser assumes every hotel exports logs in the same 9-column
-  layout confirmed against real data (Date, Time, Card [type], Encoded by [card serial], Date [key
-  name], Time [key location], Issuer, Time Issued, Room). If a brand's door-lock software exports
-  differently, its files won't parse correctly — flag this before onboarding a hotel with an
-  unfamiliar export format.
-- **Room assignment** comes directly from the explicit Room column (I) — including Floor
-  Card/Master Card rows, which still belong to whichever room's door they opened. A row is only
-  treated as a floor-wide Master Key (not tied to any room) when its Room column is blank.
+- **Two supported formats, auto-detected per floor tab** (not per hotel — some hotels have a mix):
+  - **v1** (original, 6 columns: Date, Time, Card, Encoded by, Date, Time) — room number is
+    guessed from the Card text itself (e.g. `100 Copy Number 1` → room 100; `FMK 1 (HK Floor 1)` →
+    a master key).
+  - **v2** (9 columns, adds Issuer, Time Issued, and an explicit Room column) — room assignment
+    reads the Room column directly, including Floor Card/Master Card rows tied to a specific
+    room's door. A row is only a floor-wide Master Key when Room is blank.
+  - Detection reads each floor tab's own header row (9-column with a literal "Room" header → v2,
+    anything else → v1) — see `detectSheetFormat` in `src/lib/parseCard.ts`. New floors created via
+    the "Add floor" button default to v2.
+  - **Known gap**: at least one floor tab (Aston Cilegon's "8th Floor") contains a third, different
+    raw layout (row-number in column A instead of a date, an "Opening Record Report (809)" banner
+    row, columns shifted one position left) that matches neither v1 nor v2 — those rows are safely
+    ignored (no crash, no misattribution) rather than guessed at, but won't show up under any room
+    until that's investigated and, if it turns out to be a real recurring format, explicitly
+    supported.
 - **Google Sheets row ceiling**: each hotel's spreadsheet can hold roughly 1.6M log rows in total
   across all floor tabs (Sheets' 10M-cell limit ÷ 6 columns). High-traffic properties may need
   periodic archiving of old floor tabs — not built yet, but worth planning for if a property

@@ -56,6 +56,7 @@ export async function readSheetRows(
   return (res.data.values as string[][] | undefined) ?? [];
 }
 
+/** v2 header — the richer format with an explicit Room column, used for new floors going forward. */
 export const LOG_HEADER_ROW = [
   "Date",
   "Time",
@@ -68,13 +69,18 @@ export const LOG_HEADER_ROW = [
   "Room",
 ];
 
-/** Appends rows to the end of a sheet/tab. Creates the tab first if it doesn't exist. */
+/** v1 header — the original 6-column format still used by many existing floor tabs. */
+export const V1_HEADER_ROW = ["Date", "Time", "Card", "Encoded by", "Date", "Time"];
+
+/** Appends rows to the end of a sheet/tab. Creates the tab (with the given header) first if it
+ * doesn't exist yet. */
 export async function appendSheetRows(
   spreadsheetId: string,
   sheetName: string,
-  rows: (string | number)[][]
+  rows: (string | number)[][],
+  headerRow: string[]
 ): Promise<void> {
-  await ensureTabExists(spreadsheetId, sheetName, LOG_HEADER_ROW);
+  await ensureTabExists(spreadsheetId, sheetName, headerRow);
   await appendRawRows(spreadsheetId, sheetName, rows);
 }
 

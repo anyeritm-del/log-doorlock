@@ -2,9 +2,9 @@
 
 import { requireSession, canAccessHotel } from "@/lib/authz";
 import { getHotel } from "@/lib/registry";
-import { readSheetRows, appendSheetRows, listTabNames } from "@/lib/googleSheets";
-import { parseUploadedLogFile, rowDedupeKey } from "@/lib/uploadParsing";
-import { classifyRow, rawLogRowFromCells } from "@/lib/parseCard";
+import { readSheetRows, appendSheetRows, listTabNames, LOG_HEADER_ROW, V1_HEADER_ROW } from "@/lib/googleSheets";
+import { parseUploadedFile } from "@/lib/uploadParsing";
+import { classifyRow, detectSheetFormat, rawLogRowFromCells, rowToCells, rowDedupeKey } from "@/lib/parseCard";
 import { listRoomRoster, ROOMS_TAB } from "@/lib/rooms";
 
 export interface UploadState {
@@ -50,10 +50,25 @@ export async function uploadLogAction(
   }
 
   const buffer = Buffer.from(await file.arrayBuffer());
-  const parsedRows = await parseUploadedLogFile(buffer, file.name);
-  if (parsedRows.length === 0) {
+  const { headerRow: uploadedHeaderRow, dataRows: uploadedDataRows } = await parseUploadedFile(
+    buffer,
+    file.name
+  );
+  if (uploadedDataRows.length === 0) {
     return { status: "error", message: "No data rows found in that file." };
   }
+
+  const existingTabs = await listTabNames(hotel.sheetId);
+  const floorExists = existingTabs.includes(floorName);
+
+  // The destination floor's own header is authoritative for how already-stored data reads
+  // back; only for a brand-new floor do we fall back to the uploaded file's own header.
+  const existingSheetRows = floorExists ? await readSheetRows(hotel.sheetId, floorName) : [];
+  const targetFormat = floorExists
+    ? detectSheetFormat(existingSheetRows[0] ?? [])
+    : detectSheetFormat(uploadedHeaderRow ?? []);
+
+  const parsedRows = uploadedDataRows.map((cells) => rawLogRowFromCells(cells, targetFormat));
 
   // Room rows are only accepted for numbers already registered on this floor — a floor
   // with no roster (including a brand-new one) rejects all room rows, which is what
@@ -70,29 +85,13 @@ export async function uploadLogAction(
   });
   const skippedUnknown = parsedRows.length - acceptedRows.length;
 
-  const existingTabs = await listTabNames(hotel.sheetId);
-  const existingRows = existingTabs.includes(floorName)
-    ? (await readSheetRows(hotel.sheetId, floorName)).slice(1).map(rawLogRowFromCells)
-    : [];
+  const existingRows = existingSheetRows.slice(1).map((cells) => rawLogRowFromCells(cells, targetFormat));
   const existingKeys = new Set(existingRows.map(rowDedupeKey));
 
   const newRows = acceptedRows.filter((r) => !existingKeys.has(rowDedupeKey(r)));
   if (newRows.length > 0) {
-    await appendSheetRows(
-      hotel.sheetId,
-      floorName,
-      newRows.map((r) => [
-        r.date,
-        r.time,
-        r.cardType,
-        r.cardNumber,
-        r.keyName,
-        r.keyLocation,
-        r.issuer,
-        r.timeIssued,
-        r.room,
-      ])
-    );
+    const headerRow = targetFormat === "v1" ? V1_HEADER_ROW : LOG_HEADER_ROW;
+    await appendSheetRows(hotel.sheetId, floorName, newRows.map(rowToCells), headerRow);
   }
 
   return {

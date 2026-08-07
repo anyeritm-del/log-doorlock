@@ -25,6 +25,8 @@ function getAdminSheetId(): string {
 
 const HOTELS_TAB = "Hotels";
 const USERS_TAB = "Users";
+const HOTELS_HEADER = ["hotel_id", "hotel_name", "brand", "sheet_id", "created_at"];
+const USERS_HEADER = ["email", "role", "hotel_ids"];
 
 export async function listHotels(): Promise<HotelRecord[]> {
   const rows = await readSheetRows(getAdminSheetId(), HOTELS_TAB);
@@ -47,9 +49,12 @@ export async function createHotel(hotelName: string, brand: string): Promise<Hot
   const hotelId = slugify(hotelName);
   const createdAt = new Date().toISOString();
 
-  await appendSheetRows(getAdminSheetId(), HOTELS_TAB, [
-    [hotelId, hotelName, brand, sheetId, createdAt],
-  ]);
+  await appendSheetRows(
+    getAdminSheetId(),
+    HOTELS_TAB,
+    [[hotelId, hotelName, brand, sheetId, createdAt]],
+    HOTELS_HEADER
+  );
 
   return { hotelId, hotelName, brand, sheetId, createdAt };
 }
@@ -72,9 +77,12 @@ export async function getUser(email: string): Promise<UserRecord | null> {
 }
 
 export async function addUser(user: UserRecord): Promise<void> {
-  await appendSheetRows(getAdminSheetId(), USERS_TAB, [
-    [user.email, user.role, user.hotelIds === "ALL" ? "ALL" : user.hotelIds.join(",")],
-  ]);
+  await appendSheetRows(
+    getAdminSheetId(),
+    USERS_TAB,
+    [[user.email, user.role, user.hotelIds === "ALL" ? "ALL" : user.hotelIds.join(",")]],
+    USERS_HEADER
+  );
 }
 
 export function userCanAccessHotel(user: UserRecord, hotelId: string): boolean {
