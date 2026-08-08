@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireHotelAccess } from "@/lib/authz";
 import { readSheetRows } from "@/lib/googleSheets";
-import { listFloorNames, listRoomRoster } from "@/lib/rooms";
+import { listFloorNames, listRoomRoster, naturalRoomSort } from "@/lib/rooms";
 import { buildFloorIndex, detectSheetFormat, rawLogRowFromCells } from "@/lib/parseCard";
 import { AddRoomsForm } from "./AddRoomsForm";
 
@@ -26,7 +26,12 @@ export default async function FloorPage({
   const dataRows = rows.slice(1).map((cells) => rawLogRowFromCells(cells, format));
   const index = buildFloorIndex(dataRows);
   const entryCountByRoom = new Map(index.rooms.map((r) => [r.room, r.entries.length]));
-  const unregisteredLoggedRooms = index.rooms.filter((r) => !roster.includes(r.room));
+  // Rooms with real log data show up even if nobody registered them via "Add rooms" — this
+  // matters in practice since log data is often pasted directly into the sheet, bypassing the
+  // app's upload flow (and its roster check) entirely.
+  const allRooms = Array.from(new Set([...roster, ...index.rooms.map((r) => r.room)])).sort(
+    naturalRoomSort
+  );
 
   return (
     <div className="flex flex-col gap-6">
@@ -42,11 +47,11 @@ export default async function FloorPage({
 
       <section className="flex flex-col gap-3">
         <h2 className="text-sm font-medium text-gray-600">Rooms</h2>
-        {roster.length === 0 && (
-          <p className="text-sm text-gray-600">No rooms registered yet — add some below.</p>
+        {allRooms.length === 0 && (
+          <p className="text-sm text-gray-600">No rooms yet — add some below.</p>
         )}
         <ul className="grid grid-cols-3 gap-3 sm:grid-cols-6">
-          {roster.map((room) => (
+          {allRooms.map((room) => (
             <li key={room}>
               <Link
                 href={`/hotel/${hotelId}/floor/${floorId}/room/${encodeURIComponent(room)}`}
@@ -62,31 +67,6 @@ export default async function FloorPage({
         </ul>
         <AddRoomsForm hotelId={hotelId} floorName={floorName} />
       </section>
-
-      {unregisteredLoggedRooms.length > 0 && (
-        <section className="flex flex-col gap-3">
-          <h2 className="text-sm font-medium text-gray-600">
-            Unregistered rooms found in log data
-          </h2>
-          <p className="text-xs text-gray-500">
-            These appear in uploaded logs but aren&apos;t in this floor&apos;s room list above —
-            register them to see them in the normal room list.
-          </p>
-          <ul className="grid grid-cols-3 gap-3 sm:grid-cols-6">
-            {unregisteredLoggedRooms.map((room) => (
-              <li key={room.room}>
-                <Link
-                  href={`/hotel/${hotelId}/floor/${floorId}/room/${encodeURIComponent(room.room)}`}
-                  className="block rounded-lg border border-amber-300 bg-amber-50 p-4 text-center hover:border-amber-500"
-                >
-                  <div className="text-lg font-semibold">{room.room}</div>
-                  <div className="text-xs text-gray-500">{room.entries.length} entries</div>
-                </Link>
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
 
       {index.masterKeys.length > 0 && (
         <section className="flex flex-col gap-3">

@@ -3,7 +3,7 @@ import { listTabNames, readSheetRows, ensureTabExists, appendRawRows } from "@/l
 export const ROOMS_TAB = "Rooms";
 const ROOMS_HEADER = ["floor", "room_number", "created_at"];
 
-function naturalRoomSort(a: string, b: string): number {
+export function naturalRoomSort(a: string, b: string): number {
   return a.length === b.length ? a.localeCompare(b) : a.length - b.length;
 }
 
