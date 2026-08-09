@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { requireHotelAccess } from "@/lib/authz";
 import { readSheetRows } from "@/lib/googleSheets";
 import { listFloorNames, listRoomRoster, naturalRoomSort } from "@/lib/rooms";
-import { buildFloorIndex, detectSheetFormat, rawLogRowFromCells } from "@/lib/parseCard";
+import { buildFloorIndex, detectSheetFormat, filterJunkRows, rawLogRowFromCells } from "@/lib/parseCard";
 import { AddRoomsForm } from "./AddRoomsForm";
 
 export default async function FloorPage({
@@ -23,7 +23,7 @@ export default async function FloorPage({
     readSheetRows(hotel.sheetId, floorName),
   ]);
   const format = detectSheetFormat(rows[0] ?? []);
-  const dataRows = rows.slice(1).map((cells) => rawLogRowFromCells(cells, format));
+  const dataRows = filterJunkRows(rows.slice(1)).map((cells) => rawLogRowFromCells(cells, format));
   const index = buildFloorIndex(dataRows);
   const entryCountByRoom = new Map(index.rooms.map((r) => [r.room, r.entries.length]));
   // Rooms with real log data show up even if nobody registered them via "Add rooms" — this

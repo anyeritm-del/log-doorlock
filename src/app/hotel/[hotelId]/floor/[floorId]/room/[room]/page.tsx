@@ -4,7 +4,7 @@ import { notFound } from "next/navigation";
 import { requireHotelAccess } from "@/lib/authz";
 import { readSheetRows } from "@/lib/googleSheets";
 import { listFloorNames, listRoomRoster } from "@/lib/rooms";
-import { buildFloorIndex, detectSheetFormat, rawLogRowFromCells } from "@/lib/parseCard";
+import { buildFloorIndex, detectSheetFormat, filterJunkRows, rawLogRowFromCells } from "@/lib/parseCard";
 
 export default async function RoomPage({
   params,
@@ -24,7 +24,7 @@ export default async function RoomPage({
     readSheetRows(hotel.sheetId, floorName),
   ]);
   const format = detectSheetFormat(rows[0] ?? []);
-  const dataRows = rows.slice(1).map((cells) => rawLogRowFromCells(cells, format));
+  const dataRows = filterJunkRows(rows.slice(1)).map((cells) => rawLogRowFromCells(cells, format));
   const index = buildFloorIndex(dataRows);
   const roomGroup = index.rooms.find((r) => r.room === roomNumber);
   // Allow a registered room with no log activity yet (empty state) as well as an

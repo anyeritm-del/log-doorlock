@@ -31,6 +31,16 @@ export interface RawLogRowV2 {
 
 export type RawLogRow = RawLogRowV1 | RawLogRowV2;
 
+/** Drops banner/report-title rows — some floor tabs have a leftover row where every cell repeats
+ * the same text (e.g. "Opening Record Report (809)"), which would otherwise get misclassified as
+ * a bogus Master Key entry. */
+export function filterJunkRows(rows: string[][]): string[][] {
+  return rows.filter((row) => {
+    const nonEmpty = row.filter((c) => c.trim().length > 0);
+    return nonEmpty.length === 0 || !nonEmpty.every((c) => c === nonEmpty[0]);
+  });
+}
+
 /** Maps a raw sheet row (positional cells, as returned by readSheetRows) into a RawLogRow of the
  * given format. v1 reads cells 0-5; v2 reads cells 0-8. */
 export function rawLogRowFromCells(cells: string[], format: SheetFormat): RawLogRow {
