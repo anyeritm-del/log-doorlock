@@ -1,7 +1,7 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
+  --background: #f6f7f9;
   --foreground: #171717;
   /* Every page is designed light-only (bg-white/bg-gray-50, text-gray-900, etc.) — without this,
      a dark browser/OS theme renders native form controls (input, select, textarea) with a dark
@@ -9,15 +9,24 @@
   color-scheme: light;
 }
 
+/* Archipelago International brand colours, taken from archipelagohotels.com.
+   Use as bg-brand, text-brand, border-brand, text-brand-grey, etc. */
+@theme {
+  --color-brand: #00215b;
+  --color-brand-hover: #0a2f75;
+  --color-brand-soft: #e8edf6;
+  --color-brand-grey: #939598;
+}
+
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
+  --font-sans: var(--font-brand);
   --font-mono: var(--font-geist-mono);
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
 }

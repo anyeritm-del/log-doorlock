@@ -1,10 +1,6 @@
 import Image from "next/image";
-import { Zen_Kaku_Gothic_New } from "next/font/google";
 import { signIn } from "@/auth";
-
-// Archipelago International brand: navy #00215B, grey #939598, Zen Kaku Gothic New
-// (taken from archipelagohotels.com). Logo is the white version used on their navy header.
-const brandFont = Zen_Kaku_Gothic_New({ weight: ["400", "500", "700"], subsets: ["latin"] });
+import { Alert, buttonPrimary } from "@/components/ui";
 
 // Auth.js redirects back to the sign-in page with ?error=<code> when sign-in fails.
 // AccessDenied is what our signIn callback produces for unregistered or off-domain emails.
@@ -34,12 +30,10 @@ export default async function LoginPage({ searchParams }: PageProps<"/login">) {
   const redirectTo = safeRedirect(params.callbackUrl);
 
   return (
-    <div
-      className={`${brandFont.className} flex min-h-[calc(100vh-3rem)] items-center justify-center`}
-    >
+    <div className="flex min-h-[calc(100vh-10rem)] items-center justify-center">
       <div className="w-full max-w-md">
-        <div className="overflow-hidden rounded-2xl bg-white shadow-xl shadow-[#00215B]/10 ring-1 ring-[#00215B]/10">
-          <div className="relative bg-[#00215B] px-8 pt-10 pb-8 text-center">
+        <div className="overflow-hidden rounded-2xl bg-white shadow-xl shadow-brand/10 ring-1 ring-brand/10">
+          <div className="relative bg-brand px-8 pt-10 pb-8 text-center">
             <Image
               src="/brand/archipelago-logo-white.webp"
               alt="Archipelago"
@@ -48,24 +42,21 @@ export default async function LoginPage({ searchParams }: PageProps<"/login">) {
               priority
               className="mx-auto h-auto w-52"
             />
-            <div className="mx-auto mt-6 h-px w-12 bg-[#939598]" />
+            <div className="mx-auto mt-6 h-px w-12 bg-brand-grey" />
             <p className="mt-4 text-xs font-medium tracking-[0.25em] text-white/70 uppercase">
               Door Lock Logs
             </p>
           </div>
 
           <div className="px-8 py-8">
-            <h1 className="text-xl font-bold text-[#00215B]">Welcome back</h1>
+            <h1 className="text-xl font-bold text-brand">Welcome back</h1>
             <p className="mt-2 text-sm leading-6 text-gray-600">
               Sign in with your company Google account to review hotel door lock access logs.
             </p>
 
             {errorMessage && (
-              <div
-                role="alert"
-                className="mt-6 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700"
-              >
-                {errorMessage}
+              <div className="mt-6">
+                <Alert tone="error">{errorMessage}</Alert>
               </div>
             )}
 
@@ -78,7 +69,7 @@ export default async function LoginPage({ searchParams }: PageProps<"/login">) {
             >
               <button
                 type="submit"
-                className="flex w-full items-center justify-center gap-3 rounded-md bg-[#00215B] px-4 py-3 text-sm font-medium text-white shadow-sm transition-colors hover:bg-[#0a2f75] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#00215B]"
+                className={`${buttonPrimary} w-full gap-3 py-3`}
               >
                 <span className="flex h-6 w-6 items-center justify-center rounded-sm bg-white">
                   <GoogleIcon />
@@ -87,16 +78,13 @@ export default async function LoginPage({ searchParams }: PageProps<"/login">) {
               </button>
             </form>
 
-            <p className="mt-6 border-t border-gray-100 pt-5 text-xs leading-5 text-[#939598]">
+            <p className="mt-6 border-t border-gray-100 pt-5 text-xs leading-5 text-brand-grey">
               Access is limited to registered Archipelago staff. Activity in this app may be
               audited.
             </p>
           </div>
         </div>
 
-        <p className="mt-6 text-center text-xs text-[#939598]">
-          © {new Date().getFullYear()} Archipelago International · Built by Sentinel Tech
-        </p>
       </div>
     </div>
   );

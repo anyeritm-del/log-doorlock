@@ -1,9 +1,9 @@
 import { Fragment } from "react";
-import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireHotelAccess } from "@/lib/authz";
 import { readSheetRows } from "@/lib/googleSheets";
 import { listFloorNames, listRoomRoster } from "@/lib/rooms";
+import { DataTable, EmptyState, PageHeader, tdClass, trClass } from "@/components/ui";
 import { buildFloorIndex, detectSheetFormat, filterJunkRows, rawLogRowFromCells } from "@/lib/parseCard";
 
 export default async function RoomPage({
@@ -32,106 +32,78 @@ export default async function RoomPage({
   if (!roomGroup && !roster.includes(roomNumber)) notFound();
   const entries = roomGroup?.entries ?? [];
 
+  const crumbs = [
+    { label: "Hotels", href: "/" },
+    { label: hotel.hotelName, href: `/hotel/${hotelId}` },
+    { label: floorName, href: `/hotel/${hotelId}/floor/${floorId}` },
+    { label: `Room ${roomNumber}` },
+  ];
+
   return (
-    <div className="flex flex-col gap-4">
-      <p className="text-sm text-gray-500">
-        <Link href={`/hotel/${hotelId}`} className="hover:underline">
-          {hotel.hotelName}
-        </Link>{" "}
-        /{" "}
-        <Link href={`/hotel/${hotelId}/floor/${floorId}`} className="hover:underline">
-          {floorName}
-        </Link>{" "}
-        / Room {roomNumber}
-      </p>
-      <h1 className="text-lg font-semibold">Room {roomNumber}</h1>
+    <div className="flex flex-col gap-6">
+      <PageHeader
+        title={`Room ${roomNumber}`}
+        subtitle={`${entries.length} access ${entries.length === 1 ? "entry" : "entries"}`}
+        breadcrumbs={crumbs}
+      />
 
       {entries.length === 0 ? (
-        <p className="text-sm text-gray-600">No activity yet.</p>
+        <EmptyState>No activity yet.</EmptyState>
       ) : format === "v2" ? (
-        <div className="overflow-x-auto rounded-lg border border-gray-200 bg-white">
-          <table className="w-full text-sm">
-            <thead className="bg-gray-900 text-left text-white">
-              <tr>
-                <th className="px-3 py-2">Date</th>
-                <th className="px-3 py-2">Card Type</th>
-                <th className="px-3 py-2">Card No.</th>
-                <th className="px-3 py-2">Key Name</th>
-                <th className="px-3 py-2">Key Location</th>
-                <th className="px-3 py-2">Issuer</th>
-                <th className="px-3 py-2">Time Issued</th>
-              </tr>
-            </thead>
-            <tbody>
-              {entries.map((entry, i) => {
-                if (entry.row.format !== "v2") return null;
-                return (
-                  <Fragment key={i}>
-                    {entry.hasNewGuestBefore && (
-                      <tr className="bg-gray-100">
-                        <td colSpan={7} className="px-3 py-1.5 text-xs font-semibold text-gray-500">
-                          New Guest
-                        </td>
-                      </tr>
-                    )}
-                    <tr className="border-t border-gray-100">
-                      <td className="px-3 py-2">{entry.row.date}</td>
-                      <td className="px-3 py-2">{entry.row.cardType}</td>
-                      <td className="px-3 py-2">{entry.row.cardNumber}</td>
-                      <td className="px-3 py-2">{entry.row.keyName}</td>
-                      <td className="px-3 py-2">{entry.row.keyLocation}</td>
-                      <td className="px-3 py-2">{entry.row.issuer}</td>
-                      <td className="px-3 py-2">{entry.row.timeIssued}</td>
-                    </tr>
-                  </Fragment>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+        <DataTable
+          headers={["Date", "Card Type", "Card No.", "Key Name", "Key Location", "Issuer", "Time Issued"]}
+        >
+          {entries.map((entry, i) => {
+            if (entry.row.format !== "v2") return null;
+            return (
+              <Fragment key={i}>
+                {entry.hasNewGuestBefore && <NewGuestRow colSpan={7} />}
+                <tr className={trClass}>
+                  <td className={tdClass}>{entry.row.date}</td>
+                  <td className={tdClass}>{entry.row.cardType}</td>
+                  <td className={tdClass}>{entry.row.cardNumber}</td>
+                  <td className={tdClass}>{entry.row.keyName}</td>
+                  <td className={tdClass}>{entry.row.keyLocation}</td>
+                  <td className={tdClass}>{entry.row.issuer}</td>
+                  <td className={tdClass}>{entry.row.timeIssued}</td>
+                </tr>
+              </Fragment>
+            );
+          })}
+        </DataTable>
       ) : (
-        <div className="overflow-x-auto rounded-lg border border-gray-200 bg-white">
-          <table className="w-full text-sm">
-            <thead className="bg-gray-900 text-left text-white">
-              <tr>
-                <th className="px-3 py-2">Date</th>
-                <th className="px-3 py-2">Time</th>
-                <th className="px-3 py-2">Card</th>
-                <th className="px-3 py-2">Encoded by</th>
-                <th className="px-3 py-2">Encoded Date</th>
-                <th className="px-3 py-2">Encoded Time</th>
-              </tr>
-            </thead>
-            <tbody>
-              {entries.map((entry, i) => {
-                if (entry.row.format !== "v1") return null;
-                return (
-                  <Fragment key={i}>
-                    {entry.hasNewGuestBefore && (
-                      <tr className="bg-gray-100">
-                        <td colSpan={6} className="px-3 py-1.5 text-xs font-semibold text-gray-500">
-                          New Guest
-                        </td>
-                      </tr>
-                    )}
-                    <tr className="border-t border-gray-100">
-                      <td className="px-3 py-2">{entry.row.date}</td>
-                      <td className="px-3 py-2">{entry.row.time}</td>
-                      <td className="px-3 py-2">
-                        {roomNumber}
-                        {entry.variant && entry.variant !== "Primary" ? ` ${entry.variant}` : ""}
-                      </td>
-                      <td className="px-3 py-2">{entry.row.encodedBy}</td>
-                      <td className="px-3 py-2">{entry.row.encodedDate}</td>
-                      <td className="px-3 py-2">{entry.row.encodedTime}</td>
-                    </tr>
-                  </Fragment>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+        <DataTable headers={["Date", "Time", "Card", "Encoded by", "Encoded Date", "Encoded Time"]}>
+          {entries.map((entry, i) => {
+            if (entry.row.format !== "v1") return null;
+            return (
+              <Fragment key={i}>
+                {entry.hasNewGuestBefore && <NewGuestRow colSpan={6} />}
+                <tr className={trClass}>
+                  <td className={tdClass}>{entry.row.date}</td>
+                  <td className={tdClass}>{entry.row.time}</td>
+                  <td className={tdClass}>
+                    {roomNumber}
+                    {entry.variant && entry.variant !== "Primary" ? ` ${entry.variant}` : ""}
+                  </td>
+                  <td className={tdClass}>{entry.row.encodedBy}</td>
+                  <td className={tdClass}>{entry.row.encodedDate}</td>
+                  <td className={tdClass}>{entry.row.encodedTime}</td>
+                </tr>
+              </Fragment>
+            );
+          })}
+        </DataTable>
       )}
     </div>
+  );
+}
+
+function NewGuestRow({ colSpan }: { colSpan: number }) {
+  return (
+    <tr className="bg-brand-soft">
+      <td colSpan={colSpan} className="px-4 py-1.5 text-xs font-bold tracking-wider text-brand uppercase">
+        New guest
+      </td>
+    </tr>
   );
 }

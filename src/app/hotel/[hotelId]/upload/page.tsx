@@ -1,6 +1,6 @@
-import Link from "next/link";
 import { requireHotelAccess } from "@/lib/authz";
 import { listFloorNames } from "@/lib/rooms";
+import { PageHeader, cardClass } from "@/components/ui";
 import { UploadForm } from "./UploadForm";
 
 export default async function UploadPage({
@@ -13,21 +13,30 @@ export default async function UploadPage({
   const floors = await listFloorNames(hotel.sheetId);
 
   return (
-    <div className="flex flex-col gap-4">
-      <p className="text-sm text-gray-500">
-        <Link href={`/hotel/${hotelId}`} className="hover:underline">
-          {hotel.hotelName}
-        </Link>{" "}
-        / Upload
-      </p>
-      <h1 className="text-lg font-semibold">Upload a door lock log</h1>
-      <p className="text-sm text-gray-600">
-        Upload an Excel (.xlsx) or CSV export matching the standard 9-column layout (Date, Time,
-        Card, Encoded by, Date, Time, Issuer, Time Issued, Room). Rows already present in the
-        target floor won&apos;t be duplicated, and rows for room numbers not yet registered on
-        that floor will be skipped — register them on the floor page first, then re-upload.
-      </p>
-      <UploadForm hotelId={hotelId} floors={floors} />
+    <div className="flex flex-col gap-6">
+      <PageHeader
+        title="Upload a door lock log"
+        breadcrumbs={[
+          { label: "Hotels", href: "/" },
+          { label: hotel.hotelName, href: `/hotel/${hotelId}` },
+          { label: "Upload" },
+        ]}
+      />
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,28rem)_1fr]">
+        <div className={`${cardClass} p-6`}>
+          <UploadForm hotelId={hotelId} floors={floors} />
+        </div>
+        <aside className="rounded-xl bg-brand-soft p-6 text-sm leading-6 text-gray-700">
+          <h2 className="mb-2 font-bold text-brand">File requirements</h2>
+          <p>
+            Upload an Excel (.xlsx) or CSV export matching the standard 9-column layout (Date,
+            Time, Card, Encoded by, Date, Time, Issuer, Time Issued, Room). Rows already present
+            in the target floor won&apos;t be duplicated, and rows for room numbers not yet
+            registered on that floor will be skipped — register them on the floor page first,
+            then re-upload.
+          </p>
+        </aside>
+      </div>
     </div>
   );
 }
