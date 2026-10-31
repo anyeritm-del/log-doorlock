@@ -1,9 +1,9 @@
-import Link from "next/link";
 import { requireHotelAccess } from "@/lib/authz";
 import { readSheetRows } from "@/lib/googleSheets";
 import { listFloorNames } from "@/lib/rooms";
 import { detectSheetFormat, filterJunkRows, rawLogRowFromCells } from "@/lib/parseCard";
 import { buildAuditReport } from "@/lib/audit";
+import { DataTable, EmptyState, PageHeader, SectionTitle, cardClass, tdClass, trClass } from "@/components/ui";
 
 export default async function ReportPage({
   params,
@@ -26,76 +26,77 @@ export default async function ReportPage({
   const report = buildAuditReport(floors);
 
   return (
-    <div className="flex flex-col gap-6">
-      <p className="text-sm text-gray-500">
-        <Link href={`/hotel/${hotelId}`} className="hover:underline">
-          {hotel.hotelName}
-        </Link>{" "}
-        / Report
-      </p>
-      <h1 className="text-lg font-semibold">Security report</h1>
+    <div className="flex flex-col gap-8">
+      <PageHeader
+        title="Security report"
+        subtitle="Unusual door lock activity across all floors of this hotel."
+        breadcrumbs={[
+          { label: "Hotels", href: "/" },
+          { label: hotel.hotelName, href: `/hotel/${hotelId}` },
+          { label: "Security report" },
+        ]}
+      />
 
-      <section className="flex flex-col gap-3">
-        <h2 className="text-sm font-medium text-gray-600">
+      <div className="grid gap-4 sm:grid-cols-2">
+        <SummaryCard
+          label="After-hours master/floor card access"
+          value={report.afterHoursMasterAccess.length}
+        />
+        <SummaryCard label="Keys not encoded via PMS" value={report.nonPmsEncodes.length} />
+      </div>
+
+      <section className="flex flex-col gap-4">
+        <SectionTitle count={report.afterHoursMasterAccess.length}>
           After-hours master/floor card access (20:00–07:00)
-        </h2>
+        </SectionTitle>
         {report.afterHoursMasterAccess.length === 0 ? (
-          <p className="text-sm text-gray-600">No after-hours master/floor card access found.</p>
+          <EmptyState>No after-hours master/floor card access found.</EmptyState>
         ) : (
-          <div className="overflow-x-auto rounded-lg border border-gray-200 bg-white">
-            <table className="w-full text-sm">
-              <thead className="bg-gray-900 text-left text-white">
-                <tr>
-                  <th className="px-3 py-2">Floor</th>
-                  <th className="px-3 py-2">Date/Time</th>
-                  <th className="px-3 py-2">Card</th>
-                  <th className="px-3 py-2">Hour</th>
-                </tr>
-              </thead>
-              <tbody>
-                {report.afterHoursMasterAccess.map((e, i) => (
-                  <tr key={i} className="border-t border-gray-100">
-                    <td className="px-3 py-2">{e.floor}</td>
-                    <td className="px-3 py-2">{e.dateTime}</td>
-                    <td className="px-3 py-2">{e.cardLabel}</td>
-                    <td className="px-3 py-2">{e.hour}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <DataTable headers={["Floor", "Date/Time", "Card", "Hour"]}>
+            {report.afterHoursMasterAccess.map((e, i) => (
+              <tr key={i} className={trClass}>
+                <td className={tdClass}>{e.floor}</td>
+                <td className={tdClass}>{e.dateTime}</td>
+                <td className={tdClass}>{e.cardLabel}</td>
+                <td className={tdClass}>{e.hour}</td>
+              </tr>
+            ))}
+          </DataTable>
         )}
       </section>
 
-      <section className="flex flex-col gap-3">
-        <h2 className="text-sm font-medium text-gray-600">Keys not encoded via PMS</h2>
+      <section className="flex flex-col gap-4">
+        <SectionTitle count={report.nonPmsEncodes.length}>Keys not encoded via PMS</SectionTitle>
         {report.nonPmsEncodes.length === 0 ? (
-          <p className="text-sm text-gray-600">No non-PMS key encoding events found.</p>
+          <EmptyState>No non-PMS key encoding events found.</EmptyState>
         ) : (
-          <div className="overflow-x-auto rounded-lg border border-gray-200 bg-white">
-            <table className="w-full text-sm">
-              <thead className="bg-gray-900 text-left text-white">
-                <tr>
-                  <th className="px-3 py-2">Floor</th>
-                  <th className="px-3 py-2">Date/Time</th>
-                  <th className="px-3 py-2">Card</th>
-                  <th className="px-3 py-2">Encoded by</th>
-                </tr>
-              </thead>
-              <tbody>
-                {report.nonPmsEncodes.map((e, i) => (
-                  <tr key={i} className="border-t border-gray-100">
-                    <td className="px-3 py-2">{e.floor}</td>
-                    <td className="px-3 py-2">{e.dateTime}</td>
-                    <td className="px-3 py-2">{e.cardLabel}</td>
-                    <td className="px-3 py-2">{e.encoder}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <DataTable headers={["Floor", "Date/Time", "Card", "Encoded by"]}>
+            {report.nonPmsEncodes.map((e, i) => (
+              <tr key={i} className={trClass}>
+                <td className={tdClass}>{e.floor}</td>
+                <td className={tdClass}>{e.dateTime}</td>
+                <td className={tdClass}>{e.cardLabel}</td>
+                <td className={tdClass}>{e.encoder}</td>
+              </tr>
+            ))}
+          </DataTable>
         )}
       </section>
+    </div>
+  );
+}
+
+function SummaryCard({ label, value }: { label: string; value: number }) {
+  const flagged = value > 0;
+  return (
+    <div className={`${cardClass} border-l-4 p-5 ${flagged ? "border-l-amber-500" : "border-l-green-600"}`}>
+      <div className="text-sm text-gray-600">{label}</div>
+      <div className={`mt-1 text-3xl font-bold tabular-nums ${flagged ? "text-amber-700" : "text-green-700"}`}>
+        {value}
+      </div>
+      <div className="mt-1 text-xs text-brand-grey">
+        {flagged ? "Needs review" : "Nothing to review"}
+      </div>
     </div>
   );
 }

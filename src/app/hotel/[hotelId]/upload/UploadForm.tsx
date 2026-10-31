@@ -2,6 +2,7 @@
 
 import { useActionState, useState } from "react";
 import { uploadLogAction, type UploadState } from "@/lib/actions/upload";
+import { Alert, buttonPrimary, inputClass, labelClass } from "@/components/ui";
 
 const initialState: UploadState = { status: "idle" };
 
@@ -13,13 +14,13 @@ export function UploadForm({ hotelId, floors }: { hotelId: string; floors: strin
     <form action={formAction} className="flex max-w-md flex-col gap-4">
       <input type="hidden" name="hotelId" value={hotelId} />
 
-      <label className="flex flex-col gap-1 text-sm">
+      <label className={labelClass}>
         Floor
         <select
           name="floorName"
           value={floorChoice}
           onChange={(e) => setFloorChoice(e.target.value)}
-          className="rounded-md border border-gray-300 px-2 py-1.5"
+          className={inputClass}
         >
           {floors.map((f) => (
             <option key={f} value={f}>
@@ -31,52 +32,52 @@ export function UploadForm({ hotelId, floors }: { hotelId: string; floors: strin
       </label>
 
       {floorChoice === "__new__" && (
-        <label className="flex flex-col gap-1 text-sm">
+        <label className={labelClass}>
           New floor name
           <input
             name="newFloorName"
             required
             placeholder="e.g. Floor 4"
-            className="rounded-md border border-gray-300 px-2 py-1.5"
+            className={inputClass}
           />
         </label>
       )}
 
-      <label className="flex flex-col gap-1 text-sm">
+      <label className={labelClass}>
         File
         <input
           type="file"
           name="file"
           required
           accept=".xlsx,.xls,.csv"
-          className="rounded-md border border-gray-300 px-2 py-1.5"
+          className={inputClass}
         />
       </label>
 
       <button
         type="submit"
         disabled={pending}
-        className="rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50"
+        className={buttonPrimary}
       >
         {pending ? "Uploading…" : "Upload"}
       </button>
 
       {state.status === "success" && (
-        <div className="flex flex-col gap-1">
-          <p className="text-sm text-green-700">
+        <div className="flex flex-col gap-2">
+          <Alert tone="success">
             {state.message} Added {state.added}, skipped {state.skipped} duplicate
             {state.skipped === 1 ? "" : "s"}.
-          </p>
+          </Alert>
           {(state.skippedUnknown ?? 0) > 0 && (
-            <p className="text-sm text-amber-700">
+            <Alert tone="warning">
               Skipped {state.skippedUnknown} row{state.skippedUnknown === 1 ? "" : "s"} for
               unregistered room{state.unknownRooms && state.unknownRooms.length === 1 ? "" : "s"}:{" "}
               {state.unknownRooms?.join(", ")}. Register them on the floor page and re-upload.
-            </p>
+            </Alert>
           )}
         </div>
       )}
-      {state.status === "error" && <p className="text-sm text-red-700">{state.message}</p>}
+      {state.status === "error" && <Alert tone="error">{state.message}</Alert>}
     </form>
   );
 }

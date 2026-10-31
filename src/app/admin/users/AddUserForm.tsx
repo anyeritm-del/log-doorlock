@@ -2,6 +2,7 @@
 
 import { useActionState, useState } from "react";
 import { addUserAction, type AddUserState } from "@/lib/actions/users";
+import { Alert, buttonPrimary, inputClass, labelClass } from "@/components/ui";
 
 const initialState: AddUserState = { status: "idle" };
 
@@ -16,24 +17,24 @@ export function AddUserForm({
 
   return (
     <form action={formAction} className="flex flex-col gap-3">
-      <label className="flex flex-col gap-1 text-sm">
+      <label className={labelClass}>
         Email
         <input
           type="email"
           name="email"
           required
           placeholder="name@archipelagohotels.com"
-          className="rounded-md border border-gray-300 px-2 py-1.5"
+          className={inputClass}
         />
       </label>
 
-      <label className="flex flex-col gap-1 text-sm">
+      <label className={labelClass}>
         Role
         <select
           name="role"
           value={role}
           onChange={(e) => setRole(e.target.value as "admin" | "staff")}
-          className="rounded-md border border-gray-300 px-2 py-1.5"
+          className={inputClass}
         >
           <option value="staff">Staff (per-hotel access)</option>
           <option value="admin">Admin (all hotels)</option>
@@ -42,9 +43,10 @@ export function AddUserForm({
 
       {role === "staff" && (
         <>
-          <label className="flex items-center gap-2 text-sm">
+          <label className="flex items-center gap-2 text-sm text-gray-700">
             <input
               type="checkbox"
+              className="h-4 w-4 accent-brand"
               name="accessAll"
               checked={accessAll}
               onChange={(e) => setAccessAll(e.target.checked)}
@@ -53,11 +55,11 @@ export function AddUserForm({
           </label>
 
           {!accessAll && (
-            <fieldset className="flex flex-col gap-1 text-sm">
-              <legend className="mb-1 text-gray-600">Hotels</legend>
+            <fieldset className={labelClass}>
+              <legend className="px-1 font-medium text-gray-700">Hotels</legend>
               {hotels.map((h) => (
                 <label key={h.hotelId} className="flex items-center gap-2">
-                  <input type="checkbox" name="hotelIds" value={h.hotelId} />
+                  <input type="checkbox" name="hotelIds" value={h.hotelId} className="h-4 w-4 accent-brand" />
                   {h.hotelName}
                 </label>
               ))}
@@ -69,12 +71,12 @@ export function AddUserForm({
       <button
         type="submit"
         disabled={pending}
-        className="rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50"
+        className={buttonPrimary}
       >
         {pending ? "Adding…" : "Add user"}
       </button>
-      {state.status === "success" && <p className="text-sm text-green-700">{state.message}</p>}
-      {state.status === "error" && <p className="text-sm text-red-700">{state.message}</p>}
+      {state.status === "success" && <Alert tone="success">{state.message}</Alert>}
+      {state.status === "error" && <Alert tone="error">{state.message}</Alert>}
     </form>
   );
 }
