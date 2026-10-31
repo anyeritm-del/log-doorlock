@@ -7,6 +7,7 @@ import { authConfig } from "./auth.config";
 const { auth } = NextAuth(authConfig);
 export const proxy = auth;
 
+// brand/ holds public logo assets that the login page shows before the user is signed in.
 export const config = {
-  matcher: ["/((?!api/auth|_next/static|_next/image|favicon.ico).*)"],
+  matcher: ["/((?!api/auth|_next/static|_next/image|favicon.ico|brand/).*)"],
 };
