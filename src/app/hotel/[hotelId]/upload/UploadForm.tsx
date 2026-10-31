@@ -9,39 +9,12 @@ const initialState: UploadState = { status: "idle" };
 export function UploadForm({ hotelId, floors }: { hotelId: string; floors: string[] }) {
   const [state, formAction, pending] = useActionState(uploadLogAction, initialState);
   const [floorChoice, setFloorChoice] = useState(floors[0] ?? "__new__");
+  // An Upkey PDF names its own room, so the floor is worked out on the server.
+  const [isPdf, setIsPdf] = useState(false);
 
   return (
     <form action={formAction} className="flex max-w-md flex-col gap-4">
       <input type="hidden" name="hotelId" value={hotelId} />
-
-      <label className={labelClass}>
-        Floor
-        <select
-          name="floorName"
-          value={floorChoice}
-          onChange={(e) => setFloorChoice(e.target.value)}
-          className={inputClass}
-        >
-          {floors.map((f) => (
-            <option key={f} value={f}>
-              {f}
-            </option>
-          ))}
-          <option value="__new__">+ New floor…</option>
-        </select>
-      </label>
-
-      {floorChoice === "__new__" && (
-        <label className={labelClass}>
-          New floor name
-          <input
-            name="newFloorName"
-            required
-            placeholder="e.g. Floor 4"
-            className={inputClass}
-          />
-        </label>
-      )}
 
       <label className={labelClass}>
         File
@@ -49,16 +22,50 @@ export function UploadForm({ hotelId, floors }: { hotelId: string; floors: strin
           type="file"
           name="file"
           required
-          accept=".xlsx,.xls,.csv"
+          accept=".xlsx,.xls,.csv,.pdf"
+          onChange={(e) => setIsPdf(/\.pdf$/i.test(e.target.files?.[0]?.name ?? ""))}
           className={inputClass}
         />
       </label>
 
-      <button
-        type="submit"
-        disabled={pending}
-        className={buttonPrimary}
-      >
+      {isPdf ? (
+        <p className="rounded-md bg-brand-soft px-3 py-2 text-sm text-brand">
+          Upkey lock audit PDF: the room and floor are read from the file and created if needed.
+        </p>
+      ) : (
+        <>
+          <label className={labelClass}>
+            Floor
+            <select
+              name="floorName"
+              value={floorChoice}
+              onChange={(e) => setFloorChoice(e.target.value)}
+              className={inputClass}
+            >
+              {floors.map((f) => (
+                <option key={f} value={f}>
+                  {f}
+                </option>
+              ))}
+              <option value="__new__">+ New floor…</option>
+            </select>
+          </label>
+
+          {floorChoice === "__new__" && (
+            <label className={labelClass}>
+              New floor name
+              <input
+                name="newFloorName"
+                required
+                placeholder="e.g. Floor 4"
+                className={inputClass}
+              />
+            </label>
+          )}
+        </>
+      )}
+
+      <button type="submit" disabled={pending} className={buttonPrimary}>
         {pending ? "Uploading…" : "Upload"}
       </button>
 

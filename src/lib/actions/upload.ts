@@ -2,10 +2,27 @@
 
 import { requireSession, canAccessHotel } from "@/lib/authz";
 import { getHotel } from "@/lib/registry";
-import { readSheetRows, appendSheetRows, listTabNames, LOG_HEADER_ROW, V1_HEADER_ROW } from "@/lib/googleSheets";
+import {
+  readSheetRows,
+  appendSheetRows,
+  listTabNames,
+  LOG_HEADER_ROW,
+  V1_HEADER_ROW,
+  V3_HEADER_ROW,
+} from "@/lib/googleSheets";
 import { parseUploadedFile } from "@/lib/uploadParsing";
-import { classifyRow, detectSheetFormat, rawLogRowFromCells, rowToCells, rowDedupeKey } from "@/lib/parseCard";
-import { listRoomRoster, ROOMS_TAB } from "@/lib/rooms";
+import {
+  classifyRow,
+  detectSheetFormat,
+  rawLogRowFromCells,
+  rowToCells,
+  rowDedupeKey,
+  type RawLogRowV3,
+} from "@/lib/parseCard";
+import { addRoomsToRoster, listRoomRoster, ROOMS_TAB } from "@/lib/rooms";
+import { floorNameForUpkeyRoom } from "@/lib/upkey";
+import { hotelNamesMatch, parseUpkeyPdf, UpkeyPdfError } from "@/lib/upkeyPdf";
+import type { HotelRecord } from "@/lib/registry";
 
 export interface UploadState {
   status: "idle" | "success" | "error";
@@ -30,6 +47,14 @@ export async function uploadLogAction(
   const hotel = await getHotel(hotelId);
   if (!hotel) return { status: "error", message: "Unknown hotel." };
 
+  const file = formData.get("file");
+  if (!(file instanceof File) || file.size === 0) {
+    return { status: "error", message: "Choose a file to upload." };
+  }
+  if (/\.pdf$/i.test(file.name)) {
+    return uploadUpkeyPdf(hotel, Buffer.from(await file.arrayBuffer()));
+  }
+
   let floorName = String(formData.get("floorName") ?? "").trim();
   if (floorName === "__new__") {
     floorName = String(formData.get("newFloorName") ?? "").trim();
@@ -41,12 +66,8 @@ export async function uploadLogAction(
     return { status: "error", message: `"${ROOMS_TAB}" is a reserved name — choose another.` };
   }
 
-  const file = formData.get("file");
-  if (!(file instanceof File) || file.size === 0) {
-    return { status: "error", message: "Choose a file to upload." };
-  }
   if (!/\.(xlsx|xls|csv)$/i.test(file.name)) {
-    return { status: "error", message: "Only .xlsx, .xls, or .csv files are supported." };
+    return { status: "error", message: "Only .pdf, .xlsx, .xls, or .csv files are supported." };
   }
 
   const buffer = Buffer.from(await file.arrayBuffer());
@@ -67,6 +88,12 @@ export async function uploadLogAction(
   const targetFormat = floorExists
     ? detectSheetFormat(existingSheetRows[0] ?? [])
     : detectSheetFormat(uploadedHeaderRow ?? []);
+  if (targetFormat === "v3") {
+    return {
+      status: "error",
+      message: `${floorName} holds Upkey lock audit data. Upload the room's Upkey PDF instead.`,
+    };
+  }
 
   const parsedRows = uploadedDataRows.map((cells) => rawLogRowFromCells(cells, targetFormat));
 
@@ -102,4 +129,63 @@ export async function uploadLogAction(
     skippedUnknown,
     unknownRooms: Array.from(unknownRooms).sort(),
   };
+}
+
+/** Imports one room's Upkey "Lock auditing" PDF. The floor is derived from the room number
+ * ("0100" → "Floor 1"), and the floor tab and room are created when missing. */
+async function uploadUpkeyPdf(hotel: HotelRecord, buffer: Buffer): Promise<UploadState> {
+  let parsed;
+  try {
+    parsed = await parseUpkeyPdf(buffer);
+  } catch (err) {
+    if (err instanceof UpkeyPdfError) return { status: "error", message: err.message };
+    throw err;
+  }
+
+  // Guards against uploading one hotel's PDF into another hotel's sheet.
+  if (!hotelNamesMatch(parsed.hotelName, hotel.hotelName)) {
+    return {
+      status: "error",
+      message: `This PDF is for "${parsed.hotelName || "an unknown hotel"}", not ${hotel.hotelName}.`,
+    };
+  }
+
+  const floorName = floorNameForUpkeyRoom(parsed.room);
+  const existingTabs = await listTabNames(hotel.sheetId);
+  const existingSheetRows = existingTabs.includes(floorName)
+    ? await readSheetRows(hotel.sheetId, floorName)
+    : [];
+  // Never mix Upkey rows into a floor tab that already holds another log format.
+  if (existingSheetRows.length > 0 && detectSheetFormat(existingSheetRows[0]) !== "v3") {
+    return {
+      status: "error",
+      message: `${floorName} already holds door lock data in another format, so Upkey rows can't be added to it.`,
+    };
+  }
+
+  const existingKeys = new Set(
+    existingSheetRows.slice(1).map((cells) => rowDedupeKey(rawLogRowFromCells(cells, "v3")))
+  );
+  const newRows = parsed.rows.filter((r) => !existingKeys.has(rowDedupeKey(r)));
+
+  await addRoomsToRoster(hotel.sheetId, floorName, [parsed.room]);
+  if (newRows.length > 0) {
+    await appendSheetRows(hotel.sheetId, floorName, newRows.map(upkeyRowToSheetCells), V3_HEADER_ROW);
+  }
+
+  return {
+    status: "success",
+    message: `Uploaded Room ${parsed.room} to ${floorName}.`,
+    added: newRows.length,
+    skipped: parsed.rows.length - newRows.length,
+    skippedUnknown: 0,
+    unknownRooms: [],
+  };
+}
+
+/** Rows are appended with USER_ENTERED, which would turn "2026/10/30 12:58:21" into a
+ * locale-formatted date. A leading apostrophe keeps it as the original text. */
+function upkeyRowToSheetCells(row: RawLogRowV3): string[] {
+  const [lockDate, ...rest] = rowToCells(row);
+  return [`'${lockDate}`, ...rest];
 }
