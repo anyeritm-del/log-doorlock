@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { hotelNamesMatch, parseUpkeyPages, UpkeyPdfError, type PositionedText } from "../upkeyPdf";
-import { floorNameForUpkeyRoom, normalizeUpkeyRoom, upkeyHour } from "../upkey";
+import { chooseUpkeyFloor, floorNameForUpkeyRoom, normalizeUpkeyRoom, upkeyHour } from "../upkey";
 import {
   classifyRow,
   detectSheetFormat,
@@ -123,6 +123,31 @@ describe("Upkey room and floor rules", () => {
     expect(floorNameForUpkeyRoom("0100")).toBe("Floor 1");
     expect(floorNameForUpkeyRoom("215")).toBe("Floor 2");
     expect(floorNameForUpkeyRoom("1205")).toBe("Floor 12");
+  });
+
+  it("uses the floor the room is already registered on", () => {
+    expect(chooseUpkeyFloor("100", ["1st Floor", "2nd Floor"], ["1st Floor"])).toEqual({
+      floorName: "1st Floor",
+    });
+  });
+
+  it("refuses when the room is registered on more than one floor", () => {
+    expect(chooseUpkeyFloor("100", ["1st Floor", "Floor 1"], ["1st Floor", "Floor 1"])).toEqual({
+      error: expect.stringMatching(/more than one floor \(1st Floor, Floor 1\)/),
+    });
+  });
+
+  it("otherwise follows the hotel's existing floor naming by number", () => {
+    expect(chooseUpkeyFloor("100", ["1st Floor", "10th Floor"], [])).toEqual({ floorName: "1st Floor" });
+    expect(chooseUpkeyFloor("1005", ["1st Floor", "10th Floor"], [])).toEqual({ floorName: "10th Floor" });
+    expect(chooseUpkeyFloor("215", ["Lantai 2"], [])).toEqual({ floorName: "Lantai 2" });
+  });
+
+  it("creates Floor N when no tab matches, and refuses an ambiguous match", () => {
+    expect(chooseUpkeyFloor("305", ["1st Floor"], [])).toEqual({ floorName: "Floor 3" });
+    expect(chooseUpkeyFloor("100", ["1st Floor", "Floor 1"], [])).toEqual({
+      error: expect.stringMatching(/More than one floor matches/),
+    });
   });
 
   it("reads the hour from a lock date", () => {

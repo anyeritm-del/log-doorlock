@@ -9,6 +9,7 @@ import {
   LOG_HEADER_ROW,
   V1_HEADER_ROW,
   V3_HEADER_ROW,
+  writeHeaderRow,
 } from "@/lib/googleSheets";
 import { parseUploadedFile } from "@/lib/uploadParsing";
 import {
@@ -19,8 +20,8 @@ import {
   rowDedupeKey,
   type RawLogRowV3,
 } from "@/lib/parseCard";
-import { addRoomsToRoster, listRoomRoster, ROOMS_TAB } from "@/lib/rooms";
-import { floorNameForUpkeyRoom } from "@/lib/upkey";
+import { addRoomsToRoster, listFloorNames, listFloorsForRoom, listRoomRoster, ROOMS_TAB } from "@/lib/rooms";
+import { chooseUpkeyFloor } from "@/lib/upkey";
 import { hotelNamesMatch, parseUpkeyPdf, UpkeyPdfError } from "@/lib/upkeyPdf";
 import type { HotelRecord } from "@/lib/registry";
 
@@ -131,8 +132,9 @@ export async function uploadLogAction(
   };
 }
 
-/** Imports one room's Upkey "Lock auditing" PDF. The floor is derived from the room number
- * ("0100" → "Floor 1"), and the floor tab and room are created when missing. */
+/** Imports one room's Upkey "Lock auditing" PDF. The floor is picked by chooseUpkeyFloor (the
+ * room's registered floor, else a tab with the same floor number, else a new "Floor N"), and the
+ * floor tab and room are created when missing. */
 async function uploadUpkeyPdf(hotel: HotelRecord, buffer: Buffer): Promise<UploadState> {
   let parsed;
   try {
@@ -150,17 +152,29 @@ async function uploadUpkeyPdf(hotel: HotelRecord, buffer: Buffer): Promise<Uploa
     };
   }
 
-  const floorName = floorNameForUpkeyRoom(parsed.room);
-  const existingTabs = await listTabNames(hotel.sheetId);
-  const existingSheetRows = existingTabs.includes(floorName)
+  const floorTabs = await listFloorNames(hotel.sheetId);
+  const choice = chooseUpkeyFloor(
+    parsed.room,
+    floorTabs,
+    await listFloorsForRoom(hotel.sheetId, parsed.room)
+  );
+  if ("error" in choice) return { status: "error", message: choice.error };
+  const { floorName } = choice;
+
+  const existingSheetRows = floorTabs.includes(floorName)
     ? await readSheetRows(hotel.sheetId, floorName)
     : [];
-  // Never mix Upkey rows into a floor tab that already holds another log format.
   if (existingSheetRows.length > 0 && detectSheetFormat(existingSheetRows[0]) !== "v3") {
-    return {
-      status: "error",
-      message: `${floorName} already holds door lock data in another format, so Upkey rows can't be added to it.`,
-    };
+    const hasData = existingSheetRows.slice(1).some((r) => r.some((c) => c.trim() !== ""));
+    // Never mix Upkey rows into a floor tab that already holds another log format.
+    if (hasData) {
+      return {
+        status: "error",
+        message: `${floorName} already holds door lock data in another format, so Upkey rows can't be added to it.`,
+      };
+    }
+    // A floor with only a header (e.g. created with "Add floor") can switch to Upkey safely.
+    await writeHeaderRow(hotel.sheetId, floorName, V3_HEADER_ROW);
   }
 
   const existingKeys = new Set(

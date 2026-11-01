@@ -12,12 +12,47 @@ export function normalizeUpkeyRoom(room: string): string {
   return /^\d+$/.test(trimmed) ? trimmed.replace(/^0+(?=\d)/, "") : trimmed;
 }
 
-/** Floor tab for a room number: the digits before the last two. "100" → "Floor 1",
- * "1205" → "Floor 12". */
-export function floorNameForUpkeyRoom(room: string): string {
+/** Floor number for a room: the digits before the last two. "100" → 1, "1205" → 12. */
+export function floorNumberForUpkeyRoom(room: string): number {
   const digits = normalizeUpkeyRoom(room);
-  const floor = digits.length > 2 ? digits.slice(0, -2) : "0";
-  return `Floor ${floor}`;
+  return digits.length > 2 ? parseInt(digits.slice(0, -2), 10) : 0;
+}
+
+/** Default name for a floor tab the app has to create, e.g. "Floor 1". */
+export function floorNameForUpkeyRoom(room: string): string {
+  return `Floor ${floorNumberForUpkeyRoom(room)}`;
+}
+
+export type UpkeyFloorChoice = { floorName: string } | { error: string };
+
+/** Picks the floor tab for an Upkey room, following the hotel's own naming:
+ * 1. the floor the room is already registered on (Rooms tab);
+ * 2. else the one existing floor tab with the same number ("1st Floor", "Floor 1", "Lantai 1");
+ * 3. else a new "Floor N" tab. */
+export function chooseUpkeyFloor(
+  room: string,
+  floorTabs: string[],
+  floorsWithRoom: string[]
+): UpkeyFloorChoice {
+  const registered = Array.from(new Set(floorsWithRoom));
+  if (registered.length === 1) return { floorName: registered[0] };
+  if (registered.length > 1) {
+    return {
+      error: `Room ${room} is registered on more than one floor (${registered.join(", ")}). Remove the wrong one from the Rooms tab in the hotel's Google Sheet, then upload again.`,
+    };
+  }
+
+  const floorNumber = floorNumberForUpkeyRoom(room);
+  const sameNumber = floorTabs.filter((tab) =>
+    (tab.match(/\d+/g) ?? []).some((n) => parseInt(n, 10) === floorNumber)
+  );
+  if (sameNumber.length === 1) return { floorName: sameNumber[0] };
+  if (sameNumber.length > 1) {
+    return {
+      error: `More than one floor matches room ${room} (${sameNumber.join(", ")}). Register room ${room} on the right floor first, then upload again.`,
+    };
+  }
+  return { floorName: floorNameForUpkeyRoom(room) };
 }
 
 export function isUpkeyGuest(row: RawLogRowV3): boolean {

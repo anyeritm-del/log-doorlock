@@ -103,6 +103,21 @@ export async function appendRawRows(
   });
 }
 
+/** Overwrites row 1 of a tab. Only used to switch an empty floor tab to another log format. */
+export async function writeHeaderRow(
+  spreadsheetId: string,
+  sheetName: string,
+  headerRow: string[]
+): Promise<void> {
+  const sheets = getSheetsClient();
+  await sheets.spreadsheets.values.update({
+    spreadsheetId,
+    range: `'${sheetName}'!A1`,
+    valueInputOption: "USER_ENTERED",
+    requestBody: { values: [headerRow] },
+  });
+}
+
 /** Lists the tab (sheet) names present in a spreadsheet. */
 export async function listTabNames(spreadsheetId: string): Promise<string[]> {
   const sheets = getSheetsClient();
