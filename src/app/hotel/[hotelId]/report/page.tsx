@@ -24,6 +24,9 @@ export default async function ReportPage({
   );
 
   const report = buildAuditReport(floors);
+  // Upkey (v3) data has no encoder column, so the non-PMS check only applies to other formats.
+  const showNonPms = !report.hasUpkeyData || report.hasEncoderData;
+  const masterLabel = report.hasUpkeyData ? "master/staff card" : "master/floor card";
 
   return (
     <div className="flex flex-col gap-8">
@@ -37,20 +40,31 @@ export default async function ReportPage({
         ]}
       />
 
-      <div className="grid gap-4 sm:grid-cols-2">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         <SummaryCard
-          label="After-hours master/floor card access"
+          label={`After-hours ${masterLabel} access`}
           value={report.afterHoursMasterAccess.length}
         />
-        <SummaryCard label="Keys not encoded via PMS" value={report.nonPmsEncodes.length} />
+        {report.hasUpkeyData && (
+          <>
+            <SummaryCard label="Staff entry while DND was on" value={report.staffDuringDnd.length} />
+            <SummaryCard
+              label="Guest entry 00:00–05:00"
+              value={report.guestEarlyMorning.length}
+            />
+          </>
+        )}
+        {showNonPms && (
+          <SummaryCard label="Keys not encoded via PMS" value={report.nonPmsEncodes.length} />
+        )}
       </div>
 
       <section className="flex flex-col gap-4">
         <SectionTitle count={report.afterHoursMasterAccess.length}>
-          After-hours master/floor card access (20:00–07:00)
+          After-hours {masterLabel} access (20:00–07:00)
         </SectionTitle>
         {report.afterHoursMasterAccess.length === 0 ? (
-          <EmptyState>No after-hours master/floor card access found.</EmptyState>
+          <EmptyState>No after-hours {masterLabel} access found.</EmptyState>
         ) : (
           <DataTable headers={["Floor", "Date/Time", "Card", "Hour"]}>
             {report.afterHoursMasterAccess.map((e, i) => (
@@ -65,23 +79,70 @@ export default async function ReportPage({
         )}
       </section>
 
-      <section className="flex flex-col gap-4">
-        <SectionTitle count={report.nonPmsEncodes.length}>Keys not encoded via PMS</SectionTitle>
-        {report.nonPmsEncodes.length === 0 ? (
-          <EmptyState>No non-PMS key encoding events found.</EmptyState>
-        ) : (
-          <DataTable headers={["Floor", "Date/Time", "Card", "Encoded by"]}>
-            {report.nonPmsEncodes.map((e, i) => (
-              <tr key={i} className={trClass}>
-                <td className={tdClass}>{e.floor}</td>
-                <td className={tdClass}>{e.dateTime}</td>
-                <td className={tdClass}>{e.cardLabel}</td>
-                <td className={tdClass}>{e.encoder}</td>
-              </tr>
-            ))}
-          </DataTable>
-        )}
-      </section>
+      {report.hasUpkeyData && (
+        <section className="flex flex-col gap-4">
+          <SectionTitle count={report.staffDuringDnd.length}>
+            Staff entry while DND was on
+          </SectionTitle>
+          {report.staffDuringDnd.length === 0 ? (
+            <EmptyState>No staff card entries while Privacy (DND) was on.</EmptyState>
+          ) : (
+            <DataTable headers={["Floor", "Room", "Entered at", "Staff", "DND on since"]}>
+              {report.staffDuringDnd.map((e, i) => (
+                <tr key={i} className={trClass}>
+                  <td className={tdClass}>{e.floor}</td>
+                  <td className={tdClass}>{e.room}</td>
+                  <td className={tdClass}>{e.dateTime}</td>
+                  <td className={tdClass}>{e.user}</td>
+                  <td className={tdClass}>{e.dndSince}</td>
+                </tr>
+              ))}
+            </DataTable>
+          )}
+        </section>
+      )}
+
+      {report.hasUpkeyData && (
+        <section className="flex flex-col gap-4">
+          <SectionTitle count={report.guestEarlyMorning.length}>
+            Guest entry 00:00–05:00
+          </SectionTitle>
+          {report.guestEarlyMorning.length === 0 ? (
+            <EmptyState>No guest card entries between 00:00 and 05:00.</EmptyState>
+          ) : (
+            <DataTable headers={["Floor", "Room", "Date/Time", "Card"]}>
+              {report.guestEarlyMorning.map((e, i) => (
+                <tr key={i} className={trClass}>
+                  <td className={tdClass}>{e.floor}</td>
+                  <td className={tdClass}>{e.room}</td>
+                  <td className={tdClass}>{e.dateTime}</td>
+                  <td className={tdClass}>{e.user}</td>
+                </tr>
+              ))}
+            </DataTable>
+          )}
+        </section>
+      )}
+
+      {showNonPms && (
+        <section className="flex flex-col gap-4">
+          <SectionTitle count={report.nonPmsEncodes.length}>Keys not encoded via PMS</SectionTitle>
+          {report.nonPmsEncodes.length === 0 ? (
+            <EmptyState>No non-PMS key encoding events found.</EmptyState>
+          ) : (
+            <DataTable headers={["Floor", "Date/Time", "Card", "Encoded by"]}>
+              {report.nonPmsEncodes.map((e, i) => (
+                <tr key={i} className={trClass}>
+                  <td className={tdClass}>{e.floor}</td>
+                  <td className={tdClass}>{e.dateTime}</td>
+                  <td className={tdClass}>{e.cardLabel}</td>
+                  <td className={tdClass}>{e.encoder}</td>
+                </tr>
+              ))}
+            </DataTable>
+          )}
+        </section>
+      )}
     </div>
   );
 }

@@ -27,6 +27,20 @@ export async function listRoomRoster(spreadsheetId: string, floorName: string): 
   return Array.from(new Set(rooms)).sort(naturalRoomSort);
 }
 
+/** The floors a room number is registered on (normally one). */
+export async function listFloorsForRoom(spreadsheetId: string, room: string): Promise<string[]> {
+  const tabs = await listTabNames(spreadsheetId);
+  if (!tabs.includes(ROOMS_TAB)) return [];
+
+  const rows = await readSheetRows(spreadsheetId, ROOMS_TAB);
+  const floors = rows
+    .slice(1)
+    .filter((r) => (r[1] ?? "").trim() === room)
+    .map((r) => (r[0] ?? "").trim())
+    .filter(Boolean);
+  return Array.from(new Set(floors));
+}
+
 /** Registers room numbers under a floor, skipping ones already present. */
 export async function addRoomsToRoster(
   spreadsheetId: string,

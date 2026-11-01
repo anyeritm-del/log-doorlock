@@ -72,6 +72,9 @@ export const LOG_HEADER_ROW = [
 /** v1 header — the original 6-column format still used by many existing floor tabs. */
 export const V1_HEADER_ROW = ["Date", "Time", "Card", "Encoded by", "Date", "Time"];
 
+/** v3 header — Upkey lock audit rows (e.g. Aston Anyer), imported from per-room PDF exports. */
+export const V3_HEADER_ROW = ["Lock Date", "Record Type", "Success", "User", "Room"];
+
 /** Appends rows to the end of a sheet/tab. Creates the tab (with the given header) first if it
  * doesn't exist yet. */
 export async function appendSheetRows(
@@ -97,6 +100,21 @@ export async function appendRawRows(
     valueInputOption: "USER_ENTERED",
     insertDataOption: "INSERT_ROWS",
     requestBody: { values: rows },
+  });
+}
+
+/** Overwrites row 1 of a tab. Only used to switch an empty floor tab to another log format. */
+export async function writeHeaderRow(
+  spreadsheetId: string,
+  sheetName: string,
+  headerRow: string[]
+): Promise<void> {
+  const sheets = getSheetsClient();
+  await sheets.spreadsheets.values.update({
+    spreadsheetId,
+    range: `'${sheetName}'!A1`,
+    valueInputOption: "USER_ENTERED",
+    requestBody: { values: [headerRow] },
   });
 }
 

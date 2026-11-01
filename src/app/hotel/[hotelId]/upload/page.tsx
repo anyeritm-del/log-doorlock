@@ -35,6 +35,11 @@ export default async function UploadPage({
             registered on that floor will be skipped — register them on the floor page first,
             then re-upload.
           </p>
+          <p className="mt-3">
+            <span className="font-bold text-brand">Upkey hotels (e.g. Aston Anyer):</span> upload
+            the &quot;Lock auditing&quot; PDF for one room. The room and its floor are read from
+            the PDF (room 0100 → Floor 1) and created automatically.
+          </p>
         </aside>
       </div>
     </div>
