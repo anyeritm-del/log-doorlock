@@ -1,7 +1,6 @@
 import { requireHotelAccess } from "@/lib/authz";
-import { readSheetRows } from "@/lib/googleSheets";
 import { listFloorNames } from "@/lib/rooms";
-import { detectSheetFormat, filterJunkRows, rawLogRowFromCells } from "@/lib/parseCard";
+import { readFloorLogRows } from "@/lib/floorData";
 import { buildAuditReport } from "@/lib/audit";
 import { DataTable, EmptyState, PageHeader, SectionTitle, cardClass, tdClass, trClass } from "@/components/ui";
 
@@ -15,12 +14,7 @@ export default async function ReportPage({
 
   const floorNames = await listFloorNames(hotel.sheetId);
   const floors = await Promise.all(
-    floorNames.map(async (floor) => {
-      const rows = await readSheetRows(hotel.sheetId, floor);
-      const format = detectSheetFormat(rows[0] ?? []);
-      const dataRows = filterJunkRows(rows.slice(1)).map((cells) => rawLogRowFromCells(cells, format));
-      return { floor, rows: dataRows };
-    })
+    floorNames.map(async (floor) => ({ floor, rows: await readFloorLogRows(hotel.sheetId, floor) }))
   );
 
   const report = buildAuditReport(floors);
