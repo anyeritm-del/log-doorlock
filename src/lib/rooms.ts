@@ -1,16 +1,17 @@
 import { listTabNames, readSheetRows, ensureTabExists, appendRawRows } from "@/lib/googleSheets";
+import { floorNamesFromTabs, ROOMS_TAB } from "@/lib/floorTabs";
 
-export const ROOMS_TAB = "Rooms";
+export { isReservedFloorName, ROOMS_TAB, upkeyTabFor } from "@/lib/floorTabs";
+
 const ROOMS_HEADER = ["floor", "room_number", "created_at"];
 
 export function naturalRoomSort(a: string, b: string): number {
   return a.length === b.length ? a.localeCompare(b) : a.length - b.length;
 }
 
-/** Floor tab names, excluding the reserved Rooms roster tab. */
+/** Floor names, excluding the Rooms roster tab and with Upkey companion tabs folded in. */
 export async function listFloorNames(spreadsheetId: string): Promise<string[]> {
-  const tabs = await listTabNames(spreadsheetId);
-  return tabs.filter((t) => t !== ROOMS_TAB);
+  return floorNamesFromTabs(await listTabNames(spreadsheetId));
 }
 
 /** The registered room numbers for a floor, deduped and naturally sorted. */

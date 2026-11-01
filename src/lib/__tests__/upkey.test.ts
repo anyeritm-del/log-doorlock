@@ -10,6 +10,7 @@ import {
   type RawLogRowV3,
 } from "../parseCard";
 import { buildAuditReport, getAccessHour, getEncoderName, isMasterTypeCard } from "../audit";
+import { floorNamesFromTabs, isReservedFloorName, upkeyTabFor } from "../floorTabs";
 
 // Column x positions and line spacing roughly as laid out in a real Upkey "Lock auditing" PDF.
 const X = { recordType: 78, success: 362, user: 450, lockDate: 621 };
@@ -232,5 +233,25 @@ describe("audit rules for v3", () => {
       v3({ room: "102", lockDate: "2026/10/17 19:30:00", user: "Alex Staff HK" }),
     ];
     expect(buildAuditReport([{ floor: "Floor 1", rows }]).staffDuringDnd).toEqual([]);
+  });
+});
+
+describe("Upkey companion tabs", () => {
+  it("folds '<floor> (Upkey)' tabs into their floor and hides the Rooms tab", () => {
+    expect(floorNamesFromTabs(["1st Floor", "Rooms", "1st Floor (Upkey)", "2nd Floor"])).toEqual([
+      "1st Floor",
+      "2nd Floor",
+    ]);
+  });
+
+  it("still lists a floor that only has a companion tab", () => {
+    expect(floorNamesFromTabs(["3rd Floor (Upkey)"])).toEqual(["3rd Floor"]);
+  });
+
+  it("reserves the Rooms and companion tab names", () => {
+    expect(upkeyTabFor("1st Floor")).toBe("1st Floor (Upkey)");
+    expect(isReservedFloorName("Rooms")).toBe(true);
+    expect(isReservedFloorName("1st Floor (Upkey)")).toBe(true);
+    expect(isReservedFloorName("1st Floor")).toBe(false);
   });
 });

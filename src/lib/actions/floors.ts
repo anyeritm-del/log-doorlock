@@ -3,7 +3,7 @@
 import { requireSession, canAccessHotel } from "@/lib/authz";
 import { getHotel } from "@/lib/registry";
 import { ensureTabExists, LOG_HEADER_ROW } from "@/lib/googleSheets";
-import { listFloorNames, ROOMS_TAB } from "@/lib/rooms";
+import { isReservedFloorName, listFloorNames } from "@/lib/rooms";
 
 export interface CreateFloorState {
   status: "idle" | "success" | "error";
@@ -28,8 +28,8 @@ export async function createFloorAction(
   if (!floorName) {
     return { status: "error", message: "Enter a floor name." };
   }
-  if (floorName === ROOMS_TAB) {
-    return { status: "error", message: `"${ROOMS_TAB}" is a reserved name — choose another.` };
+  if (isReservedFloorName(floorName)) {
+    return { status: "error", message: `"${floorName}" is a reserved name — choose another.` };
   }
 
   const existing = await listFloorNames(hotel.sheetId);

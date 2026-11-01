@@ -20,7 +20,14 @@ import {
   rowDedupeKey,
   type RawLogRowV3,
 } from "@/lib/parseCard";
-import { addRoomsToRoster, listFloorNames, listFloorsForRoom, listRoomRoster, ROOMS_TAB } from "@/lib/rooms";
+import {
+  addRoomsToRoster,
+  isReservedFloorName,
+  listFloorNames,
+  listFloorsForRoom,
+  listRoomRoster,
+  upkeyTabFor,
+} from "@/lib/rooms";
 import { chooseUpkeyFloor } from "@/lib/upkey";
 import { hotelNamesMatch, parseUpkeyPdf, UpkeyPdfError } from "@/lib/upkeyPdf";
 import type { HotelRecord } from "@/lib/registry";
@@ -63,8 +70,8 @@ export async function uploadLogAction(
   if (!floorName) {
     return { status: "error", message: "Choose or name a floor." };
   }
-  if (floorName === ROOMS_TAB) {
-    return { status: "error", message: `"${ROOMS_TAB}" is a reserved name — choose another.` };
+  if (isReservedFloorName(floorName)) {
+    return { status: "error", message: `"${floorName}" is a reserved name — choose another.` };
   }
 
   if (!/\.(xlsx|xls|csv)$/i.test(file.name)) {
@@ -134,7 +141,8 @@ export async function uploadLogAction(
 
 /** Imports one room's Upkey "Lock auditing" PDF. The floor is picked by chooseUpkeyFloor (the
  * room's registered floor, else a tab with the same floor number, else a new "Floor N"), and the
- * floor tab and room are created when missing. */
+ * floor tab and room are created when missing. Rows go into the floor's own tab when it is empty
+ * or already Upkey; if it holds another format they go into its "<floor> (Upkey)" companion tab. */
 async function uploadUpkeyPdf(hotel: HotelRecord, buffer: Buffer): Promise<UploadState> {
   let parsed;
   try {
@@ -161,20 +169,20 @@ async function uploadUpkeyPdf(hotel: HotelRecord, buffer: Buffer): Promise<Uploa
   if ("error" in choice) return { status: "error", message: choice.error };
   const { floorName } = choice;
 
-  const existingSheetRows = floorTabs.includes(floorName)
-    ? await readSheetRows(hotel.sheetId, floorName)
-    : [];
-  if (existingSheetRows.length > 0 && detectSheetFormat(existingSheetRows[0]) !== "v3") {
-    const hasData = existingSheetRows.slice(1).some((r) => r.some((c) => c.trim() !== ""));
-    // Never mix Upkey rows into a floor tab that already holds another log format.
+  const tabs = await listTabNames(hotel.sheetId);
+  const mainRows = tabs.includes(floorName) ? await readSheetRows(hotel.sheetId, floorName) : [];
+  let targetTab = floorName;
+  let existingSheetRows = mainRows;
+  if (mainRows.length > 0 && detectSheetFormat(mainRows[0]) !== "v3") {
+    const hasData = mainRows.slice(1).some((r) => r.some((c) => c.trim() !== ""));
     if (hasData) {
-      return {
-        status: "error",
-        message: `${floorName} already holds door lock data in another format, so Upkey rows can't be added to it.`,
-      };
+      // Never mix formats in one tab: Upkey rows go into the floor's companion tab.
+      targetTab = upkeyTabFor(floorName);
+      existingSheetRows = tabs.includes(targetTab) ? await readSheetRows(hotel.sheetId, targetTab) : [];
+    } else {
+      // A floor with only a header (e.g. created with "Add floor") can switch to Upkey safely.
+      await writeHeaderRow(hotel.sheetId, floorName, V3_HEADER_ROW);
     }
-    // A floor with only a header (e.g. created with "Add floor") can switch to Upkey safely.
-    await writeHeaderRow(hotel.sheetId, floorName, V3_HEADER_ROW);
   }
 
   const existingKeys = new Set(
@@ -184,7 +192,7 @@ async function uploadUpkeyPdf(hotel: HotelRecord, buffer: Buffer): Promise<Uploa
 
   await addRoomsToRoster(hotel.sheetId, floorName, [parsed.room]);
   if (newRows.length > 0) {
-    await appendSheetRows(hotel.sheetId, floorName, newRows.map(upkeyRowToSheetCells), V3_HEADER_ROW);
+    await appendSheetRows(hotel.sheetId, targetTab, newRows.map(upkeyRowToSheetCells), V3_HEADER_ROW);
   }
 
   return {

@@ -1,9 +1,9 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireHotelAccess } from "@/lib/authz";
-import { readSheetRows } from "@/lib/googleSheets";
 import { listFloorNames, listRoomRoster, naturalRoomSort } from "@/lib/rooms";
-import { buildFloorIndex, detectSheetFormat, filterJunkRows, rawLogRowFromCells } from "@/lib/parseCard";
+import { buildFloorIndex } from "@/lib/parseCard";
+import { readFloorLogRows } from "@/lib/floorData";
 import { EmptyState, PageHeader, SectionTitle, cardClass, linkCardClass } from "@/components/ui";
 import { AddRoomsForm } from "./AddRoomsForm";
 
@@ -19,12 +19,10 @@ export default async function FloorPage({
   const floors = await listFloorNames(hotel.sheetId);
   if (!floors.includes(floorName)) notFound();
 
-  const [roster, rows] = await Promise.all([
+  const [roster, dataRows] = await Promise.all([
     listRoomRoster(hotel.sheetId, floorName),
-    readSheetRows(hotel.sheetId, floorName),
+    readFloorLogRows(hotel.sheetId, floorName),
   ]);
-  const format = detectSheetFormat(rows[0] ?? []);
-  const dataRows = filterJunkRows(rows.slice(1)).map((cells) => rawLogRowFromCells(cells, format));
   const index = buildFloorIndex(dataRows);
   const entryCountByRoom = new Map(index.rooms.map((r) => [r.room, r.entries.length]));
   // Rooms with real log data show up even if nobody registered them via "Add rooms" — this
