@@ -36,6 +36,12 @@ export default async function UploadPage({
             then re-upload.
           </p>
           <p className="mt-3">
+            <span className="font-bold text-brand">Aston Cilegon and Aston Serang:</span> upload
+            the per-room export (Event Ord., Time, Card Type, Card No., Holder, …) as it is. It has
+            no Room column, so name the file after the room, e.g. &quot;Room 200.xlsx&quot;, and
+            choose its floor. The floor tab keeps the export&apos;s own columns.
+          </p>
+          <p className="mt-3">
             <span className="font-bold text-brand">Upkey hotels (e.g. Aston Anyer):</span> upload
             the &quot;Lock auditing&quot; PDF for one room. The room and its floor are read from
             the PDF (room 0100 → Floor 1) and created automatically.

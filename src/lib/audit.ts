@@ -42,8 +42,8 @@ function parseHour24(timeStr: string): number | null {
 }
 
 /** The access hour (0-23) for a row, or null if it can't be parsed. v1 reads the `time` field
- * (24h); v2 reads the hour embedded in the `date` field's 12h+AM/PM datetime string; v3 reads
- * the 24h `lockDate`. */
+ * (24h); v2 and v4 read the hour embedded in their 12h+AM/PM datetime string; v3 reads the 24h
+ * `lockDate`. */
 export function getAccessHour(row: RawLogRow): number | null {
   switch (row.format) {
     case "v1":
@@ -52,6 +52,8 @@ export function getAccessHour(row: RawLogRow): number | null {
       return parseHour12(row.date);
     case "v3":
       return upkeyHour(row.lockDate);
+    case "v4":
+      return parseHour12(row.time);
   }
 }
 
@@ -86,6 +88,8 @@ function cardLabel(row: RawLogRow): string {
       return row.keyName.trim() ? `${row.cardType} — ${row.keyName}` : row.cardType;
     case "v3":
       return `${row.user} — Room ${row.room}`;
+    case "v4":
+      return row.holder.trim() ? `${row.cardType} — ${row.holder}` : row.cardType;
   }
 }
 
@@ -97,6 +101,8 @@ function dateTimeLabel(row: RawLogRow): string {
       return row.date;
     case "v3":
       return row.lockDate;
+    case "v4":
+      return row.time;
   }
 }
 

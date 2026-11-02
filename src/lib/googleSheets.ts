@@ -72,6 +72,22 @@ export const LOG_HEADER_ROW = [
 /** v1 header — the original 6-column format still used by many existing floor tabs. */
 export const V1_HEADER_ROW = ["Date", "Time", "Card", "Encoded by", "Date", "Time"];
 
+/** v4 header — per-room export rows (e.g. Aston Cilegon), the export's own columns plus Room. */
+export const V4_HEADER_ROW = [
+  "Event Ord.",
+  "Time",
+  "Flag",
+  "Card Type",
+  "Card No.",
+  "Holder",
+  "ID No.",
+  "Issuer",
+  "Time Issued",
+  "Modifier",
+  "Time Modified",
+  "Room",
+];
+
 /** v3 header — Upkey lock audit rows (e.g. Aston Anyer), imported from per-room PDF exports. */
 export const V3_HEADER_ROW = ["Lock Date", "Record Type", "Success", "User", "Room"];
 
@@ -103,19 +119,56 @@ export async function appendRawRows(
   });
 }
 
-/** Overwrites row 1 of a tab. Only used to switch an empty floor tab to another log format. */
+/** Overwrites row 1 of a tab. Only used to switch an empty floor tab to another log format.
+ * Cells of a longer previous header are blanked so no stale column names are left behind. */
 export async function writeHeaderRow(
   spreadsheetId: string,
   sheetName: string,
-  headerRow: string[]
+  headerRow: string[],
+  previousHeader: string[] = []
 ): Promise<void> {
+  const padded = [...headerRow];
+  while (padded.length < previousHeader.length) padded.push("");
   const sheets = getSheetsClient();
   await sheets.spreadsheets.values.update({
     spreadsheetId,
     range: `'${sheetName}'!A1`,
     valueInputOption: "USER_ENTERED",
-    requestBody: { values: [headerRow] },
+    requestBody: { values: [padded] },
   });
+}
+
+/** Copies a tab's rows (header included) into a new backup tab exactly as read, then clears every
+ * row below the header in the original tab. The copy is written first, so a failure never leaves
+ * the rows only cleared. `rows` must be the tab's current content as returned by readSheetRows. */
+export async function moveRowsToBackupTab(
+  spreadsheetId: string,
+  sheetName: string,
+  rows: string[][],
+  backupName: string
+): Promise<void> {
+  const existing = await listTabNames(spreadsheetId);
+  if (existing.includes(backupName)) {
+    throw new Error(`Backup tab "${backupName}" already exists; rename or remove it first.`);
+  }
+  const sheets = getSheetsClient();
+  await sheets.spreadsheets.batchUpdate({
+    spreadsheetId,
+    requestBody: { requests: [{ addSheet: { properties: { title: backupName } } }] },
+  });
+  // RAW keeps every value exactly as it was read, with no date/number re-parsing.
+  await sheets.spreadsheets.values.update({
+    spreadsheetId,
+    range: `'${backupName}'!A1`,
+    valueInputOption: "RAW",
+    requestBody: { values: rows },
+  });
+  if (rows.length > 1) {
+    await sheets.spreadsheets.values.clear({
+      spreadsheetId,
+      range: `'${sheetName}'!2:${rows.length}`,
+    });
+  }
 }
 
 /** Lists the tab (sheet) names present in a spreadsheet. */

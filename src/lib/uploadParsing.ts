@@ -1,5 +1,6 @@
 import ExcelJS from "exceljs";
 import { Readable } from "node:stream";
+import { formatV2DateTime } from "./eventExport";
 
 const HEADER_MARKERS = ["date", "time", "card", "encoded by", "encoded", "issuer", "room"];
 
@@ -55,16 +56,10 @@ function worksheetToRows(worksheet: ExcelJS.Worksheet): ParsedUploadFile {
   return { headerRow, dataRows };
 }
 
-/** Parses an uploaded .xlsx or .csv file's first worksheet into raw cell rows (A-I columns).
- * Format-agnostic — the caller decides v1 vs v2 based on the header row (or the destination
- * floor's existing header, for an already-created floor) and maps cells via rawLogRowFromCells. */
-export async function parseUploadedFile(buffer: Buffer, filename: string): Promise<ParsedUploadFile> {
-  const isCsv = filename.toLowerCase().endsWith(".csv");
+async function loadFirstWorksheet(buffer: Buffer, filename: string): Promise<ExcelJS.Worksheet | null> {
   const workbook = new ExcelJS.Workbook();
-
-  if (isCsv) {
-    const worksheet = await workbook.csv.read(Readable.from(buffer));
-    return worksheetToRows(worksheet);
+  if (filename.toLowerCase().endsWith(".csv")) {
+    return workbook.csv.read(Readable.from(buffer));
   }
 
   // exceljs's own .d.ts shadows the global Buffer type with a stale local shim
@@ -72,7 +67,39 @@ export async function parseUploadedFile(buffer: Buffer, filename: string): Promi
   // members in the "esnext" lib (resize, resizable, etc.), so a real Node Buffer
   // never structurally matches it even though it works fine at runtime.
   await workbook.xlsx.load(buffer as unknown as Parameters<typeof workbook.xlsx.load>[0]);
-  const worksheet = workbook.worksheets[0];
+  return workbook.worksheets[0] ?? null;
+}
+
+/** Parses an uploaded .xlsx or .csv file's first worksheet into raw cell rows (A-I columns).
+ * Format-agnostic — the caller decides v1 vs v2 based on the header row (or the destination
+ * floor's existing header, for an already-created floor) and maps cells via rawLogRowFromCells. */
+export async function parseUploadedFile(buffer: Buffer, filename: string): Promise<ParsedUploadFile> {
+  const worksheet = await loadFirstWorksheet(buffer, filename);
   if (!worksheet) return { headerRow: null, dataRows: [] };
   return worksheetToRows(worksheet);
+}
+
+function fullCellToString(value: ExcelJS.CellValue): string {
+  // Unlike cellToString (v1/v2 files keep date and time in separate columns), a date cell here
+  // holds the whole access date and time.
+  if (value instanceof Date) return formatV2DateTime(value);
+  return cellToString(value);
+}
+
+/** Reads every column of the first worksheet: the first non-empty row as the header, the rest as
+ * data. Used to recognise exports whose layout differs from the A-I log columns. */
+export async function parseUploadedTable(
+  buffer: Buffer,
+  filename: string
+): Promise<{ headerRow: string[]; dataRows: string[][] }> {
+  const worksheet = await loadFirstWorksheet(buffer, filename);
+  const rows: string[][] = [];
+  worksheet?.eachRow((row) => {
+    const cells: string[] = [];
+    for (let col = 1; col <= worksheet.columnCount; col++) {
+      cells.push(fullCellToString(row.getCell(col).value));
+    }
+    if (cells.some((c) => c.trim() !== "")) rows.push(cells);
+  });
+  return { headerRow: rows[0] ?? [], dataRows: rows.slice(1) };
 }
