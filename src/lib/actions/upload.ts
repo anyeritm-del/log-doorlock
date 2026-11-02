@@ -16,9 +16,9 @@ import {
 import { parseUploadedFile, parseUploadedTable } from "@/lib/uploadParsing";
 import {
   eventExportToRows,
+  findEventExport,
   hotelUsesEventExport,
-  isEventExportHeader,
-  roomFromFileName,
+  resolveExportRoom,
 } from "@/lib/eventExport";
 import {
   classifyRow,
@@ -98,12 +98,12 @@ export async function uploadLogAction(
   const floorExists = existingTabs.includes(floorName);
   let existingSheetRows = floorExists ? await readSheetRows(hotel.sheetId, floorName) : [];
 
-  const table = await parseUploadedTable(buffer, file.name);
+  const eventExport = findEventExport(await parseUploadedTable(buffer, file.name));
   let targetFormat: SheetFormat;
   let parsedRows: RawLogRow[];
   let toSheetCells = rowToCells;
 
-  if (isEventExportHeader(table.headerRow)) {
+  if (eventExport) {
     // Per-room event export (Aston Cilegon, Aston Serang): no Room column, so the room comes
     // from the file name. Rows are stored as v4, the export's own columns plus Room.
     if (!hotelUsesEventExport(hotel.hotelName)) {
@@ -112,13 +112,9 @@ export async function uploadLogAction(
         message: `This per-room export format is only enabled for Aston Cilegon and Aston Serang, not ${hotel.hotelName}.`,
       };
     }
-    const room = roomFromFileName(file.name);
-    if (!room) {
-      return {
-        status: "error",
-        message: 'This export has no Room column. Name the file after the room, e.g. "Room 200.xlsx", and upload again.',
-      };
-    }
+    const exportRoom = resolveExportRoom(file.name, eventExport.title);
+    if ("error" in exportRoom) return { status: "error", message: exportRoom.error };
+    const { room } = exportRoom;
     if (floorExists && detectSheetFormat(existingSheetRows[0] ?? []) !== "v4") {
       const filled = filledRowNumbers(existingSheetRows);
       // Rows the app can't read (e.g. an earlier upload of this export in the wrong layout) can be
@@ -144,7 +140,7 @@ export async function uploadLogAction(
       await writeHeaderRow(hotel.sheetId, floorName, V4_HEADER_ROW, existingSheetRows[0]);
     }
     targetFormat = "v4";
-    parsedRows = eventExportToRows(table.headerRow, table.dataRows, room);
+    parsedRows = eventExportToRows(eventExport.headerRow, eventExport.dataRows, room);
     toSheetCells = eventRowToSheetCells;
   } else {
     const { headerRow: uploadedHeaderRow, dataRows: uploadedDataRows } = await parseUploadedFile(

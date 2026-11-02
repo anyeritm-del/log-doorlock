@@ -3,9 +3,11 @@ import ExcelJS from "exceljs";
 import {
   eventExportToRows,
   eventTimeSortKey,
+  findEventExport,
   formatV2DateTime,
   hotelUsesEventExport,
   isEventExportHeader,
+  resolveExportRoom,
   roomFromFileName,
 } from "../eventExport";
 import { parseUploadedTable } from "../uploadParsing";
@@ -200,9 +202,40 @@ describe("parseUploadedTable", () => {
     ]);
     const buffer = Buffer.from(await workbook.xlsx.writeBuffer());
 
-    const table = await parseUploadedTable(buffer, "Room 200.xlsx");
+    const table = findEventExport(await parseUploadedTable(buffer, "Room 200.xlsx"));
 
-    expect(isEventExportHeader(table.headerRow)).toBe(true);
-    expect(eventExportToRows(table.headerRow, table.dataRows, "200")).toEqual([v4()]);
+    expect(table).not.toBeNull();
+    expect(eventExportToRows(table!.headerRow, table!.dataRows, "200")).toEqual([v4()]);
+  });
+});
+
+describe("findEventExport and room resolution", () => {
+  const row = ["1", "11/1/2026 10:53:00 AM", "", "Master Card", "112348", "Master Key HK-2", "SPV-1", "IT", "9/1/2026 8:31:11 AM", "", ""];
+
+  it("finds the header below a merged title row, as in the Room 202 export", () => {
+    const title = Array(11).fill("Opening Record Report (202)");
+    expect(findEventExport([title, HEADER, row])).toEqual({
+      headerRow: HEADER,
+      dataRows: [row],
+      title: "Opening Record Report (202)",
+    });
+  });
+
+  it("finds a header in the first row with no title", () => {
+    expect(findEventExport([HEADER, row])).toEqual({ headerRow: HEADER, dataRows: [row], title: "" });
+  });
+
+  it("returns null for files without the export header", () => {
+    expect(findEventExport([["Date", "Time", "Card", "Encoded by", "Date", "Time"], row])).toBeNull();
+  });
+
+  it("takes the room from the file name, else the title, and refuses a mismatch", () => {
+    expect(resolveExportRoom("Room 202.xlsx", "Opening Record Report (202)")).toEqual({ room: "202" });
+    expect(resolveExportRoom("export.xlsx", "Opening Record Report (0202)")).toEqual({ room: "202" });
+    expect(resolveExportRoom("Room 200.xlsx", "")).toEqual({ room: "200" });
+    expect(resolveExportRoom("Room 200.xlsx", "Opening Record Report (202)")).toEqual({
+      error: expect.stringMatching(/file name says room 200 but the report title says room 202/),
+    });
+    expect(resolveExportRoom("export.xlsx", "")).toEqual({ error: expect.stringMatching(/no Room column/) });
   });
 });
