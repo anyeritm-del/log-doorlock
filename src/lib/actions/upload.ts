@@ -9,17 +9,29 @@ import {
   LOG_HEADER_ROW,
   V1_HEADER_ROW,
   V3_HEADER_ROW,
+  V4_HEADER_ROW,
+  moveRowsToBackupTab,
   writeHeaderRow,
 } from "@/lib/googleSheets";
-import { parseUploadedFile } from "@/lib/uploadParsing";
+import { parseUploadedFile, parseUploadedTable } from "@/lib/uploadParsing";
+import {
+  eventExportToRows,
+  hotelUsesEventExport,
+  isEventExportHeader,
+  roomFromFileName,
+} from "@/lib/eventExport";
 import {
   classifyRow,
+  countReadableRows,
   detectSheetFormat,
   rawLogRowFromCells,
   rowToCells,
   rowDedupeKey,
+  type RawLogRow,
   type RawLogRowV3,
+  type SheetFormat,
 } from "@/lib/parseCard";
+import { backupTabFor } from "@/lib/floorTabs";
 import {
   addRoomsToRoster,
   isReservedFloorName,
@@ -39,6 +51,9 @@ export interface UploadState {
   skipped?: number;
   skippedUnknown?: number;
   unknownRooms?: string[];
+  /** Set when the target floor holds only rows the app can't read; the form then offers to move
+   * them to a backup tab (see moveRowsToBackupTab). */
+  offerBackup?: boolean;
 }
 
 export async function uploadLogAction(
@@ -79,31 +94,85 @@ export async function uploadLogAction(
   }
 
   const buffer = Buffer.from(await file.arrayBuffer());
-  const { headerRow: uploadedHeaderRow, dataRows: uploadedDataRows } = await parseUploadedFile(
-    buffer,
-    file.name
-  );
-  if (uploadedDataRows.length === 0) {
-    return { status: "error", message: "No data rows found in that file." };
-  }
-
   const existingTabs = await listTabNames(hotel.sheetId);
   const floorExists = existingTabs.includes(floorName);
+  let existingSheetRows = floorExists ? await readSheetRows(hotel.sheetId, floorName) : [];
 
-  // The destination floor's own header is authoritative for how already-stored data reads
-  // back; only for a brand-new floor do we fall back to the uploaded file's own header.
-  const existingSheetRows = floorExists ? await readSheetRows(hotel.sheetId, floorName) : [];
-  const targetFormat = floorExists
-    ? detectSheetFormat(existingSheetRows[0] ?? [])
-    : detectSheetFormat(uploadedHeaderRow ?? []);
-  if (targetFormat === "v3") {
-    return {
-      status: "error",
-      message: `${floorName} holds Upkey lock audit data. Upload the room's Upkey PDF instead.`,
-    };
+  const table = await parseUploadedTable(buffer, file.name);
+  let targetFormat: SheetFormat;
+  let parsedRows: RawLogRow[];
+  let toSheetCells = rowToCells;
+
+  if (isEventExportHeader(table.headerRow)) {
+    // Per-room event export (Aston Cilegon, Aston Serang): no Room column, so the room comes
+    // from the file name. Rows are stored as v4, the export's own columns plus Room.
+    if (!hotelUsesEventExport(hotel.hotelName)) {
+      return {
+        status: "error",
+        message: `This per-room export format is only enabled for Aston Cilegon and Aston Serang, not ${hotel.hotelName}.`,
+      };
+    }
+    const room = roomFromFileName(file.name);
+    if (!room) {
+      return {
+        status: "error",
+        message: 'This export has no Room column. Name the file after the room, e.g. "Room 200.xlsx", and upload again.',
+      };
+    }
+    if (floorExists && detectSheetFormat(existingSheetRows[0] ?? []) !== "v4") {
+      const filled = filledRowNumbers(existingSheetRows);
+      // Rows the app can't read (e.g. an earlier upload of this export in the wrong layout) can be
+      // moved aside, but only when the user ticks the box and none of the rows are readable.
+      const allUnreadable = filled.length > 0 && countReadableRows(existingSheetRows) === 0;
+      if (allUnreadable && formData.get("moveUnreadableToBackup") === "on") {
+        const backupName = backupTabFor(floorName, new Date());
+        await moveRowsToBackupTab(hotel.sheetId, floorName, existingSheetRows, backupName);
+        existingSheetRows = [existingSheetRows[0] ?? []];
+      } else if (filled.length > 0) {
+        return {
+          status: "error",
+          message: allUnreadable
+            ? `${floorName} has ${filled.length} old row${filled.length === 1 ? "" : "s"} the app can't read ` +
+              `(first at row ${filled[0]}). Tick "Move old rows to a backup tab", choose the file again and upload.`
+            : `${floorName} already holds door lock data in another format (${filled.length} ` +
+              `row${filled.length === 1 ? "" : "s"} with content, first at row ${filled[0]}), so this ` +
+              `export can't be added to it. Delete those rows in the Google Sheet (keep row 1) and upload again.`,
+          offerBackup: allUnreadable,
+        };
+      }
+      // A floor with only a header can switch to the export layout safely.
+      await writeHeaderRow(hotel.sheetId, floorName, V4_HEADER_ROW, existingSheetRows[0]);
+    }
+    targetFormat = "v4";
+    parsedRows = eventExportToRows(table.headerRow, table.dataRows, room);
+    toSheetCells = eventRowToSheetCells;
+  } else {
+    const { headerRow: uploadedHeaderRow, dataRows: uploadedDataRows } = await parseUploadedFile(
+      buffer,
+      file.name
+    );
+    // The destination floor's own header is authoritative for how already-stored data reads
+    // back; only for a brand-new floor do we fall back to the uploaded file's own header.
+    targetFormat = floorExists
+      ? detectSheetFormat(existingSheetRows[0] ?? [])
+      : detectSheetFormat(uploadedHeaderRow ?? []);
+    if (targetFormat === "v3") {
+      return {
+        status: "error",
+        message: `${floorName} holds Upkey lock audit data. Upload the room's Upkey PDF instead.`,
+      };
+    }
+    if (targetFormat === "v4") {
+      return {
+        status: "error",
+        message: `${floorName} holds per-room export data. Upload the room's export (e.g. "Room 200.xlsx") instead.`,
+      };
+    }
+    parsedRows = uploadedDataRows.map((cells) => rawLogRowFromCells(cells, targetFormat));
   }
-
-  const parsedRows = uploadedDataRows.map((cells) => rawLogRowFromCells(cells, targetFormat));
+  if (parsedRows.length === 0) {
+    return { status: "error", message: "No data rows found in that file." };
+  }
 
   // Room rows are only accepted for numbers already registered on this floor — a floor
   // with no roster (including a brand-new one) rejects all room rows, which is what
@@ -125,8 +194,9 @@ export async function uploadLogAction(
 
   const newRows = acceptedRows.filter((r) => !existingKeys.has(rowDedupeKey(r)));
   if (newRows.length > 0) {
-    const headerRow = targetFormat === "v1" ? V1_HEADER_ROW : LOG_HEADER_ROW;
-    await appendSheetRows(hotel.sheetId, floorName, newRows.map(rowToCells), headerRow);
+    const headerRow =
+      targetFormat === "v1" ? V1_HEADER_ROW : targetFormat === "v4" ? V4_HEADER_ROW : LOG_HEADER_ROW;
+    await appendSheetRows(hotel.sheetId, floorName, newRows.map(toSheetCells), headerRow);
   }
 
   return {
@@ -174,14 +244,14 @@ async function uploadUpkeyPdf(hotel: HotelRecord, buffer: Buffer): Promise<Uploa
   let targetTab = floorName;
   let existingSheetRows = mainRows;
   if (mainRows.length > 0 && detectSheetFormat(mainRows[0]) !== "v3") {
-    const hasData = mainRows.slice(1).some((r) => r.some((c) => c.trim() !== ""));
+    const hasData = filledRowNumbers(mainRows).length > 0;
     if (hasData) {
       // Never mix formats in one tab: Upkey rows go into the floor's companion tab.
       targetTab = upkeyTabFor(floorName);
       existingSheetRows = tabs.includes(targetTab) ? await readSheetRows(hotel.sheetId, targetTab) : [];
     } else {
       // A floor with only a header (e.g. created with "Add floor") can switch to Upkey safely.
-      await writeHeaderRow(hotel.sheetId, floorName, V3_HEADER_ROW);
+      await writeHeaderRow(hotel.sheetId, floorName, V3_HEADER_ROW, mainRows[0]);
     }
   }
 
@@ -210,4 +280,16 @@ async function uploadUpkeyPdf(hotel: HotelRecord, buffer: Buffer): Promise<Uploa
 function upkeyRowToSheetCells(row: RawLogRowV3): string[] {
   const [lockDate, ...rest] = rowToCells(row);
   return [`'${lockDate}`, ...rest];
+}
+
+/** Like upkeyRowToSheetCells: keeps the v4 "10/31/2026 9:15:00 PM" times (Time, Time Issued,
+ * Time Modified) as text, so Sheets doesn't reformat them (the after-hours check reads the AM/PM). */
+function eventRowToSheetCells(row: RawLogRow): string[] {
+  const cells = rowToCells(row);
+  return cells.map((c, i) => ([1, 8, 10].includes(i) && c !== "" ? `'${c}` : c));
+}
+
+/** Sheet row numbers (1-based, header excluded) that have any non-blank cell. */
+function filledRowNumbers(sheetRows: string[][]): number[] {
+  return sheetRows.flatMap((cells, i) => (i > 0 && cells.some((c) => c.trim() !== "") ? [i + 1] : []));
 }

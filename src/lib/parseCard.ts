@@ -1,10 +1,12 @@
-export type SheetFormat = "v1" | "v2" | "v3";
+export type SheetFormat = "v1" | "v2" | "v3" | "v4";
 
-/** v3 (Upkey lock audit) starts with a "Lock Date" header. v2 is identified by an explicit "Room"
- * header in the 9th column. Anything else (including a missing/short header) defaults to v1, the
- * original 6-column shape. */
+/** v3 (Upkey lock audit) starts with a "Lock Date" header; v4 (per-room export) starts with
+ * "Event Ord.". v2 is identified by an explicit "Room" header in the 9th column. Anything else
+ * (including a missing/short header) defaults to v1, the original 6-column shape. */
 export function detectSheetFormat(headerRow: string[]): SheetFormat {
-  if ((headerRow[0] ?? "").trim().toLowerCase() === "lock date") return "v3";
+  const first = (headerRow[0] ?? "").trim().toLowerCase();
+  if (first === "lock date") return "v3";
+  if (/^event\b/.test(first)) return "v4";
   return (headerRow[8] ?? "").trim().toLowerCase() === "room" ? "v2" : "v1";
 }
 
@@ -41,7 +43,25 @@ export interface RawLogRowV3 {
   room: string; // E — room number without leading zeros, e.g. "100"
 }
 
-export type RawLogRow = RawLogRowV1 | RawLogRowV2 | RawLogRowV3;
+/** Per-room door lock export (e.g. Aston Cilegon "Room 200.xlsx"), stored with the export's own
+ * columns plus the room, which the export itself doesn't contain (see eventExport.ts). */
+export interface RawLogRowV4 {
+  format: "v4";
+  eventOrd: string; // A — position in that export (1 = newest); not stable between exports
+  time: string; // B — access time, "10/31/2026 9:15:00 PM"
+  flag: string; // C
+  cardType: string; // D — "Guest Card" | "Floor Card" | "Master Card" | ...
+  cardNumber: string; // E
+  holder: string; // F — guest name or master key name
+  idNumber: string; // G — master key coverage, e.g. "Master Floor 2"
+  issuer: string; // H — who encoded the card
+  timeIssued: string; // I
+  modifier: string; // J
+  timeModified: string; // K
+  room: string; // L — from the export's file name
+}
+
+export type RawLogRow = RawLogRowV1 | RawLogRowV2 | RawLogRowV3 | RawLogRowV4;
 
 /** Drops banner/report-title rows — some floor tabs have a leftover row where every cell repeats
  * the same text (e.g. "Opening Record Report (809)"), which would otherwise get misclassified as
@@ -56,6 +76,23 @@ export function filterJunkRows(rows: string[][]): string[][] {
 /** Maps a raw sheet row (positional cells, as returned by readSheetRows) into a RawLogRow of the
  * given format. v1 reads cells 0-5; v2 reads cells 0-8; v3 reads cells 0-4. */
 export function rawLogRowFromCells(cells: string[], format: SheetFormat): RawLogRow {
+  if (format === "v4") {
+    return {
+      format: "v4",
+      eventOrd: cells[0] ?? "",
+      time: cells[1] ?? "",
+      flag: cells[2] ?? "",
+      cardType: cells[3] ?? "",
+      cardNumber: cells[4] ?? "",
+      holder: cells[5] ?? "",
+      idNumber: cells[6] ?? "",
+      issuer: cells[7] ?? "",
+      timeIssued: cells[8] ?? "",
+      modifier: cells[9] ?? "",
+      timeModified: cells[10] ?? "",
+      room: cells[11] ?? "",
+    };
+  }
   if (format === "v3") {
     return {
       format: "v3",
@@ -110,12 +147,29 @@ export function rowToCells(row: RawLogRow): string[] {
       ];
     case "v3":
       return [row.lockDate, row.recordType, row.success, row.user, row.room];
+    case "v4":
+      return [
+        row.eventOrd,
+        row.time,
+        row.flag,
+        row.cardType,
+        row.cardNumber,
+        row.holder,
+        row.idNumber,
+        row.issuer,
+        row.timeIssued,
+        row.modifier,
+        row.timeModified,
+        row.room,
+      ];
   }
 }
 
-/** Stable dedupe key for a row, used to avoid re-appending rows already present in a floor tab. */
+/** Stable dedupe key for a row, used to avoid re-appending rows already present in a floor tab.
+ * v4 leaves out Event Ord., which renumbers in every new export of the same room. */
 export function rowDedupeKey(row: RawLogRow): string {
-  return rowToCells(row)
+  const cells = rowToCells(row);
+  return (row.format === "v4" ? cells.slice(1) : cells)
     .map((s) => s.trim().toLowerCase())
     .join("|");
 }
@@ -135,6 +189,12 @@ const LEADING_ROOM_NUMBER = /^(\d+)\s*(.*)$/;
  * row still belongs to whichever room's door it opened, and only a genuinely room-less row
  * becomes a Master Keys entry. */
 export function classifyRow(row: RawLogRow): LogEntry | null {
+  if (row.format === "v4") {
+    // Every row of a per-room export belongs to that room, whatever card opened the door.
+    const room = row.room.trim();
+    return room && row.time.trim() ? { kind: "room", room, row } : null;
+  }
+
   if (row.format === "v3") {
     // Every Upkey row comes from one room's lock, so it always belongs to that room.
     const room = row.room.trim();
@@ -164,6 +224,15 @@ export function classifyRow(row: RawLogRow): LogEntry | null {
   const label = row.keyName.trim() || cardType;
   if (!label) return null;
   return { kind: "masterKey", label, row };
+}
+
+/** How many data rows of a tab (header first, as read from the sheet) the app can read: rows that
+ * classifyRow turns into a room, master-key or New Guest entry under the tab's own format. */
+export function countReadableRows(sheetRows: string[][]): number {
+  const format = detectSheetFormat(sheetRows[0] ?? []);
+  return filterJunkRows(sheetRows.slice(1)).filter(
+    (cells) => cells.some((c) => c.trim() !== "") && classifyRow(rawLogRowFromCells(cells, format)) !== null
+  ).length;
 }
 
 export interface RoomGroup {

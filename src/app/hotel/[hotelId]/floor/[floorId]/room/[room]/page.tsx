@@ -6,6 +6,7 @@ import { isPrivacyEnabled, isPrivacyEvent, isUpkeyStaffCard } from "@/lib/upkey"
 import { DataTable, EmptyState, PageHeader, SectionTitle, tdClass, trClass } from "@/components/ui";
 import { buildFloorIndex, type RoomGroup } from "@/lib/parseCard";
 import { readFloorLogRows } from "@/lib/floorData";
+import { eventTimeSortKey } from "@/lib/eventExport";
 
 export default async function RoomPage({
   params,
@@ -40,6 +41,14 @@ export default async function RoomPage({
       a.row.format === "v3" && b.row.format === "v3" ? b.row.lockDate.localeCompare(a.row.lockDate) : 0
     );
   const otherEntries = entries.filter((e) => e.row.format !== "v3");
+  // Per-room exports can also overlap between uploads; show them newest first too.
+  if (otherEntries[0]?.row.format === "v4") {
+    otherEntries.sort((a, b) =>
+      a.row.format === "v4" && b.row.format === "v4"
+        ? eventTimeSortKey(b.row.time).localeCompare(eventTimeSortKey(a.row.time))
+        : 0
+    );
+  }
   const showTitles = upkeyEntries.length > 0 && otherEntries.length > 0;
 
   const crumbs = [
@@ -69,7 +78,9 @@ export default async function RoomPage({
       {otherEntries.length > 0 && (
         <section className="flex flex-col gap-4">
           {showTitles && <SectionTitle count={otherEntries.length}>Imported log</SectionTitle>}
-          {otherEntries[0].row.format === "v2" ? (
+          {otherEntries[0].row.format === "v4" ? (
+            <V4Table entries={otherEntries} />
+          ) : otherEntries[0].row.format === "v2" ? (
             <V2Table entries={otherEntries} />
           ) : (
             <V1Table entries={otherEntries} roomNumber={roomNumber} />
@@ -146,6 +157,47 @@ function V2Table({ entries }: { entries: Entries }) {
               <td className={tdClass}>{entry.row.timeIssued}</td>
             </tr>
           </Fragment>
+        );
+      })}
+    </DataTable>
+  );
+}
+
+/** Same columns as the per-room export file (Aston Cilegon / Aston Serang). */
+function V4Table({ entries }: { entries: Entries }) {
+  return (
+    <DataTable
+      headers={[
+        "Event Ord.",
+        "Time",
+        "Flag",
+        "Card Type",
+        "Card No.",
+        "Holder",
+        "ID No.",
+        "Issuer",
+        "Time Issued",
+        "Modifier",
+        "Time Modified",
+      ]}
+    >
+      {entries.map((entry, i) => {
+        if (entry.row.format !== "v4") return null;
+        const row = entry.row;
+        return (
+          <tr key={i} className={trClass}>
+            <td className={tdClass}>{row.eventOrd}</td>
+            <td className={tdClass}>{row.time}</td>
+            <td className={tdClass}>{row.flag}</td>
+            <td className={tdClass}>{row.cardType}</td>
+            <td className={tdClass}>{row.cardNumber}</td>
+            <td className={tdClass}>{row.holder}</td>
+            <td className={tdClass}>{row.idNumber}</td>
+            <td className={tdClass}>{row.issuer}</td>
+            <td className={tdClass}>{row.timeIssued}</td>
+            <td className={tdClass}>{row.modifier}</td>
+            <td className={tdClass}>{row.timeModified}</td>
+          </tr>
         );
       })}
     </DataTable>

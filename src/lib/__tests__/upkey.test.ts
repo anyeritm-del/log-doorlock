@@ -3,6 +3,7 @@ import { hotelNamesMatch, parseUpkeyPages, UpkeyPdfError, type PositionedText } 
 import { chooseUpkeyFloor, floorNameForUpkeyRoom, normalizeUpkeyRoom, upkeyHour } from "../upkey";
 import {
   classifyRow,
+  countReadableRows,
   detectSheetFormat,
   rawLogRowFromCells,
   rowDedupeKey,
@@ -10,7 +11,7 @@ import {
   type RawLogRowV3,
 } from "../parseCard";
 import { buildAuditReport, getAccessHour, getEncoderName, isMasterTypeCard } from "../audit";
-import { floorNamesFromTabs, isReservedFloorName, upkeyTabFor } from "../floorTabs";
+import { backupTabFor, floorNamesFromTabs, isBackupTab, isReservedFloorName, upkeyTabFor } from "../floorTabs";
 
 // Column x positions and line spacing roughly as laid out in a real Upkey "Lock auditing" PDF.
 const X = { recordType: 78, success: 362, user: 450, lockDate: 621 };
@@ -253,5 +254,40 @@ describe("Upkey companion tabs", () => {
     expect(isReservedFloorName("Rooms")).toBe(true);
     expect(isReservedFloorName("1st Floor (Upkey)")).toBe(true);
     expect(isReservedFloorName("1st Floor")).toBe(false);
+  });
+});
+
+describe("backup tabs", () => {
+  it("names backups by date and keeps them out of the floor list", () => {
+    const name = backupTabFor("2nd Fllor", new Date(Date.UTC(2026, 10, 2, 5, 0, 0)));
+    expect(name).toBe("2nd Fllor (backup 2026-11-02)");
+    expect(isBackupTab(name)).toBe(true);
+    expect(isReservedFloorName(name)).toBe(true);
+    expect(floorNamesFromTabs(["2nd Fllor", name, "Rooms"])).toEqual(["2nd Fllor"]);
+    expect(isBackupTab("2nd Floor")).toBe(false);
+  });
+});
+
+describe("countReadableRows", () => {
+  const V1_HEADER = ["Date", "Time", "Card", "Encoded by", "Date", "Time"];
+
+  it("counts zero for an export uploaded in the wrong layout (empty Card column)", () => {
+    // What Aston Cilegon's first upload left in its v1 floor tab: Event Ord., time, empty Flag, ...
+    const rows = [
+      V1_HEADER,
+      ["1", "09:28:00", "", "Master Card", "112348", "Master Key HK-2"],
+      ["2", "21:15:00", "", "Guest Card", "116834", "Test Guest"],
+      ["", "", "", "", "", ""],
+    ];
+    expect(countReadableRows(rows)).toBe(0);
+  });
+
+  it("counts readable rows so real data is never moved", () => {
+    const rows = [
+      V1_HEADER,
+      ["14/02", "15:05", "100", "", "", ""],
+      ["1", "09:28:00", "", "Master Card", "112348", "Master Key HK-2"],
+    ];
+    expect(countReadableRows(rows)).toBe(1);
   });
 });

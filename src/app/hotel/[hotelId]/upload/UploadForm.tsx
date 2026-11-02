@@ -65,6 +65,21 @@ export function UploadForm({ hotelId, floors }: { hotelId: string; floors: strin
         </>
       )}
 
+      {state.offerBackup && (
+        <label className="flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+          <input
+            type="checkbox"
+            name="moveUnreadableToBackup"
+            className="mt-0.5 h-4 w-4 accent-brand"
+          />
+          <span>
+            <span className="font-medium">Move old rows to a backup tab</span> — the app copies them
+            to a new &quot;&lt;floor&gt; (backup &lt;date&gt;)&quot; tab in the Google Sheet, then clears
+            them from the floor. Nothing is deleted.
+          </span>
+        </label>
+      )}
+
       <button type="submit" disabled={pending} className={buttonPrimary}>
         {pending ? "Uploading…" : "Upload"}
       </button>
