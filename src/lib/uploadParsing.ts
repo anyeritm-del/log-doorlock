@@ -86,12 +86,9 @@ function fullCellToString(value: ExcelJS.CellValue): string {
   return cellToString(value);
 }
 
-/** Reads every column of the first worksheet: the first non-empty row as the header, the rest as
- * data. Used to recognise exports whose layout differs from the A-I log columns. */
-export async function parseUploadedTable(
-  buffer: Buffer,
-  filename: string
-): Promise<{ headerRow: string[]; dataRows: string[][] }> {
+/** Reads every non-empty row of the first worksheet, all columns. Used to recognise exports whose
+ * layout differs from the A-I log columns (the caller finds the header row itself). */
+export async function parseUploadedTable(buffer: Buffer, filename: string): Promise<string[][]> {
   const worksheet = await loadFirstWorksheet(buffer, filename);
   const rows: string[][] = [];
   worksheet?.eachRow((row) => {
@@ -101,5 +98,5 @@ export async function parseUploadedTable(
     }
     if (cells.some((c) => c.trim() !== "")) rows.push(cells);
   });
-  return { headerRow: rows[0] ?? [], dataRows: rows.slice(1) };
+  return rows;
 }

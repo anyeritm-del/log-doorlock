@@ -55,6 +55,54 @@ export function isEventExportHeader(headerRow: string[]): boolean {
   return /^event\b/.test(normalize(headerRow[0] ?? "")) && columnIndex(headerRow) !== null;
 }
 
+export interface EventExportTable {
+  headerRow: string[];
+  dataRows: string[][];
+  /** Text of a title row above the header, e.g. "Opening Record Report (202)", or "". */
+  title: string;
+}
+
+// Some exports put a merged title row ("Opening Record Report (202)") above the header.
+const HEADER_SEARCH_ROWS = 10;
+
+/** Finds the event export header within the first rows of a sheet, or null if this isn't one. */
+export function findEventExport(rows: string[][]): EventExportTable | null {
+  const limit = Math.min(rows.length, HEADER_SEARCH_ROWS);
+  for (let i = 0; i < limit; i++) {
+    if (!isEventExportHeader(rows[i])) continue;
+    const title = rows
+      .slice(0, i)
+      .flat()
+      .find((c) => c.trim() !== "");
+    return { headerRow: rows[i], dataRows: rows.slice(i + 1), title: title?.trim() ?? "" };
+  }
+  return null;
+}
+
+/** Room number from a title such as "Opening Record Report (202)". */
+export function roomFromTitle(title: string): string | null {
+  const m = title.match(/\((\d+)\)\s*$/);
+  return m ? m[1].replace(/^0+(?=\d)/, "") : null;
+}
+
+export type ExportRoom = { room: string } | { error: string };
+
+/** The room for an export: from the file name, else from the title row. Refuses when both are
+ * present and disagree, so rows never land in the wrong room. */
+export function resolveExportRoom(fileName: string, title: string): ExportRoom {
+  const fromName = roomFromFileName(fileName);
+  const fromTitle = roomFromTitle(title);
+  if (fromName && fromTitle && fromName !== fromTitle) {
+    return {
+      error: `The file name says room ${fromName} but the report title says room ${fromTitle}. Check the file and upload again.`,
+    };
+  }
+  const room = fromName ?? fromTitle;
+  return room
+    ? { room }
+    : { error: 'This export has no Room column. Name the file after the room, e.g. "Room 200.xlsx", and upload again.' };
+}
+
 /** Room number from a file name such as "Room 200.xlsx", "room_0200.csv" or "Room-200 (1).xlsx". */
 export function roomFromFileName(fileName: string): string | null {
   const m = fileName.match(/room[\s_-]*(\d+)/i);
