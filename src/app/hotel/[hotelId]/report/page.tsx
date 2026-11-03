@@ -40,13 +40,7 @@ export default async function ReportPage({
           value={report.afterHoursMasterAccess.length}
         />
         {report.hasUpkeyData && (
-          <>
-            <SummaryCard label="Staff entry while DND was on" value={report.staffDuringDnd.length} />
-            <SummaryCard
-              label="Guest entry 00:00–05:00"
-              value={report.guestEarlyMorning.length}
-            />
-          </>
+          <SummaryCard label="Guest entry 00:00–05:00" value={report.guestEarlyMorning.length} />
         )}
         {showNonPms && (
           <SummaryCard label="Keys not encoded via PMS" value={report.nonPmsEncodes.length} />
@@ -72,29 +66,6 @@ export default async function ReportPage({
           </DataTable>
         )}
       </section>
-
-      {report.hasUpkeyData && (
-        <section className="flex flex-col gap-4">
-          <SectionTitle count={report.staffDuringDnd.length}>
-            Staff entry while DND was on
-          </SectionTitle>
-          {report.staffDuringDnd.length === 0 ? (
-            <EmptyState>No staff card entries while Privacy (DND) was on.</EmptyState>
-          ) : (
-            <DataTable headers={["Floor", "Room", "Entered at", "Staff", "DND on since"]}>
-              {report.staffDuringDnd.map((e, i) => (
-                <tr key={i} className={trClass}>
-                  <td className={tdClass}>{e.floor}</td>
-                  <td className={tdClass}>{e.room}</td>
-                  <td className={tdClass}>{e.dateTime}</td>
-                  <td className={tdClass}>{e.user}</td>
-                  <td className={tdClass}>{e.dndSince}</td>
-                </tr>
-              ))}
-            </DataTable>
-          )}
-        </section>
-      )}
 
       {report.hasUpkeyData && (
         <section className="flex flex-col gap-4">

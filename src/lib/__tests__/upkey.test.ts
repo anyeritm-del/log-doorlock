@@ -198,7 +198,7 @@ describe("audit rules for v3", () => {
     expect(getEncoderName(v3())).toBeNull();
   });
 
-  it("flags after-hours staff entry, staff entry during DND and early guest entry", () => {
+  it("flags after-hours staff entry and early guest entry", () => {
     // Newest first, as in the PDF.
     const rows = [
       v3({ lockDate: "2026/10/17 20:35:03", recordType: "Privacy disabled", user: "Unknown" }),
@@ -213,27 +213,10 @@ describe("audit rules for v3", () => {
 
     expect(report.afterHoursMasterAccess.map((e) => e.dateTime)).toEqual(["2026/10/01 23:28:07"]);
     expect(report.afterHoursMasterAccess[0].cardLabel).toBe("Sam Staff FO — Room 100");
-    expect(report.staffDuringDnd).toEqual([
-      {
-        floor: "Floor 1",
-        room: "100",
-        dateTime: "2026/10/17 19:30:00",
-        user: "Alex Staff HK",
-        dndSince: "2026/10/17 19:05:30",
-      },
-    ]);
     expect(report.guestEarlyMorning.map((e) => e.dateTime)).toEqual(["2026/10/02 03:15:00"]);
     expect(report.nonPmsEncodes).toEqual([]);
     expect(report.hasUpkeyData).toBe(true);
     expect(report.hasEncoderData).toBe(false);
-  });
-
-  it("tracks DND per room, not across rooms", () => {
-    const rows = [
-      v3({ room: "101", lockDate: "2026/10/17 19:00:00", recordType: "Privacy enabled", user: "Unknown" }),
-      v3({ room: "102", lockDate: "2026/10/17 19:30:00", user: "Alex Staff HK" }),
-    ];
-    expect(buildAuditReport([{ floor: "Floor 1", rows }]).staffDuringDnd).toEqual([]);
   });
 });
 
