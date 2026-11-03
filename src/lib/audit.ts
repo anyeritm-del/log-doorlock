@@ -1,11 +1,5 @@
-import type { RawLogRow, RawLogRowV3 } from "./parseCard";
-import {
-  isPrivacyDisabled,
-  isPrivacyEnabled,
-  isUpkeyGuestCard,
-  isUpkeyStaffCard,
-  upkeyHour,
-} from "./upkey";
+import type { RawLogRow } from "./parseCard";
+import { isUpkeyGuestCard, isUpkeyStaffCard, upkeyHour } from "./upkey";
 
 const NEW_GUEST_PATTERN = /^new\s*guest$/i;
 const CARD_TYPE_LABEL_PATTERN = /^(guest|floor|master)\s*card$/i;
@@ -120,15 +114,6 @@ export interface NonPmsEncodeEntry {
   encoder: string;
 }
 
-/** Upkey only: a staff card opened the door while the guest had Privacy (Do Not Disturb) on. */
-export interface StaffDuringDndEntry {
-  floor: string;
-  room: string;
-  dateTime: string;
-  user: string;
-  dndSince: string;
-}
-
 /** Upkey only: a guest card opened the door between 00:00 and 04:59. */
 export interface GuestEarlyMorningEntry {
   floor: string;
@@ -140,9 +125,8 @@ export interface GuestEarlyMorningEntry {
 export interface AuditReport {
   afterHoursMasterAccess: AfterHoursEntry[];
   nonPmsEncodes: NonPmsEncodeEntry[];
-  staffDuringDnd: StaffDuringDndEntry[];
   guestEarlyMorning: GuestEarlyMorningEntry[];
-  /** Any Upkey (v3) rows — the DND and early-morning checks only apply to these. */
+  /** Any Upkey (v3) rows — the early-morning guest check only applies to these. */
   hasUpkeyData: boolean;
   /** Any v1/v2 rows — only those formats record who encoded a card (non-PMS check). */
   hasEncoderData: boolean;
@@ -154,7 +138,6 @@ export interface AuditReport {
 export function buildAuditReport(floors: Array<{ floor: string; rows: RawLogRow[] }>): AuditReport {
   const afterHoursMasterAccess: AfterHoursEntry[] = [];
   const nonPmsEncodes: NonPmsEncodeEntry[] = [];
-  const staffDuringDnd: StaffDuringDndEntry[] = [];
   const guestEarlyMorning: GuestEarlyMorningEntry[] = [];
   let hasUpkeyData = false;
   let hasEncoderData = false;
@@ -187,48 +170,16 @@ export function buildAuditReport(floors: Array<{ floor: string; rows: RawLogRow[
         hasEncoderData = true;
       }
     }
-
-    const upkeyRows = rows.filter((r): r is RawLogRowV3 => r.format === "v3");
-    staffDuringDnd.push(...findStaffDuringDnd(floor, upkeyRows));
   }
 
   // Upkey lock dates sort correctly as text; show the newest first.
-  const newestFirst = (a: { dateTime: string }, b: { dateTime: string }) =>
-    b.dateTime.localeCompare(a.dateTime);
-  staffDuringDnd.sort(newestFirst);
-  guestEarlyMorning.sort(newestFirst);
+  guestEarlyMorning.sort((a, b) => b.dateTime.localeCompare(a.dateTime));
 
   return {
     afterHoursMasterAccess,
     nonPmsEncodes,
-    staffDuringDnd,
     guestEarlyMorning,
     hasUpkeyData,
     hasEncoderData,
   };
-}
-
-/** Replays each room's lock events in time order, tracking whether Privacy is on, and returns
- * every staff card unlock that happened while it was. */
-export function findStaffDuringDnd(floor: string, rows: RawLogRowV3[]): StaffDuringDndEntry[] {
-  const byRoom = new Map<string, RawLogRowV3[]>();
-  for (const row of rows) {
-    const list = byRoom.get(row.room) ?? [];
-    list.push(row);
-    byRoom.set(row.room, list);
-  }
-
-  const found: StaffDuringDndEntry[] = [];
-  for (const [room, roomRows] of byRoom) {
-    const ordered = [...roomRows].sort((a, b) => a.lockDate.localeCompare(b.lockDate));
-    let dndSince: string | null = null;
-    for (const row of ordered) {
-      if (isPrivacyEnabled(row)) dndSince = row.lockDate;
-      else if (isPrivacyDisabled(row)) dndSince = null;
-      else if (dndSince && isUpkeyStaffCard(row)) {
-        found.push({ floor, room, dateTime: row.lockDate, user: row.user, dndSince });
-      }
-    }
-  }
-  return found;
 }
