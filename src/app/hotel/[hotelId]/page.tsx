@@ -6,7 +6,6 @@ import {
   PageHeader,
   SectionTitle,
   buttonPrimary,
-  buttonSecondary,
   cardClass,
   linkCardClass,
 } from "@/components/ui";
@@ -28,14 +27,9 @@ export default async function HotelFloorsPage({
         subtitle={hotel.brand}
         breadcrumbs={[{ label: "Hotels", href: "/" }, { label: hotel.hotelName }]}
         actions={
-          <>
-            <Link href={`/hotel/${hotelId}/report`} className={buttonSecondary}>
-              Security report
-            </Link>
-            <Link href={`/hotel/${hotelId}/upload`} className={buttonPrimary}>
-              Upload log file
-            </Link>
-          </>
+          <Link href={`/hotel/${hotelId}/upload`} className={buttonPrimary}>
+            Upload log file
+          </Link>
         }
       />
 
