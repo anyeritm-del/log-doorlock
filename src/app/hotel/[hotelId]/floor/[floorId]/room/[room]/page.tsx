@@ -7,13 +7,20 @@ import { DataTable, EmptyState, PageHeader, SectionTitle, tdClass, trClass } fro
 import { buildFloorIndex, type RoomGroup } from "@/lib/parseCard";
 import { readFloorLogRows } from "@/lib/floorData";
 import { eventTimeSortKey } from "@/lib/eventExport";
+import { buildAuditReport } from "@/lib/audit";
+import { monthOptions, rowMonthOption } from "@/lib/months";
+import { MonthSelect } from "./MonthSelect";
+import { RoomSecurity } from "./RoomSecurity";
 
 export default async function RoomPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ hotelId: string; floorId: string; room: string }>;
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
 }) {
   const { hotelId, floorId, room } = await params;
+  const { month: monthParam } = await searchParams;
   const floorName = decodeURIComponent(floorId);
   const roomNumber = decodeURIComponent(room);
   const hotel = await requireHotelAccess(hotelId);
@@ -30,7 +37,12 @@ export default async function RoomPage({
   // Allow a registered room with no log activity yet (empty state) as well as an
   // unregistered room that already has log entries (edge case, see floor page).
   if (!roomGroup && !roster.includes(roomNumber)) notFound();
-  const entries = roomGroup?.entries ?? [];
+  const allEntries = roomGroup?.entries ?? [];
+  // Month filter (?month=2026-10). An unknown value falls back to all months.
+  const months = monthOptions(allEntries.map((e) => e.row));
+  const month = typeof monthParam === "string" && months.some((m) => m.key === monthParam) ? monthParam : "";
+  const entries = month ? allEntries.filter((e) => rowMonthOption(e.row) === month) : allEntries;
+  const security = buildAuditReport([{ floor: floorName, rows: entries.map((e) => e.row) }]);
   // A floor can hold an Upkey companion tab next to its main tab, so one room may have rows of
   // two formats; each gets its own table. Upkey rows can come from several overlapping PDF
   // uploads, so they are ordered by lock date (newest first). Other formats keep sheet order,
@@ -66,7 +78,11 @@ export default async function RoomPage({
         breadcrumbs={crumbs}
       />
 
+      {allEntries.length > 0 && <MonthSelect options={months} value={month} totalCount={allEntries.length} />}
+
       {entries.length === 0 && <EmptyState>No activity yet.</EmptyState>}
+
+      {entries.length > 0 && <RoomSecurity report={security} />}
 
       {upkeyEntries.length > 0 && (
         <section className="flex flex-col gap-4">

@@ -15,7 +15,7 @@ export default async function HomePage() {
     <div className="flex flex-col gap-6">
       <PageHeader
         title="Your hotels"
-        subtitle="Select a hotel to view floors, room access history and security reports."
+        subtitle="Select a hotel to view floors, room access history and security checks."
       />
       {hotels.length === 0 && (
         <EmptyState>No hotels are assigned to your account yet. Contact an admin.</EmptyState>
